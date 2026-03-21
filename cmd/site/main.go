@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/lovyou-ai/site/content"
 	"github.com/lovyou-ai/site/views"
@@ -120,9 +121,22 @@ func main() {
 
 	addr := ":" + p
 	log.Printf("lovyou.ai listening on %s", addr)
-	if err := http.ListenAndServe(addr, mux); err != nil {
+	if err := http.ListenAndServe(addr, noCache(mux)); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Middleware
+// ────────────────────────────────────────────────────────────────────
+
+func noCache(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/static/") {
+			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // ────────────────────────────────────────────────────────────────────
