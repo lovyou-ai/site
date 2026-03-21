@@ -67,7 +67,8 @@ type Project struct {
 	ID          string
 	Name        string
 	Description string
-	Owner       string
+	Owner       string // display name
+	OwnerID     string // FK to users.id — used for access control
 	CreatedAt   time.Time
 }
 
@@ -178,6 +179,15 @@ func New(dsn string) (*Store, error) {
 	return s, nil
 }
 
+// NewWithDB wraps an existing database connection.
+func NewWithDB(db *sql.DB) (*Store, error) {
+	s := &Store{db: db}
+	if err := s.migrate(); err != nil {
+		return nil, fmt.Errorf("migrate: %w", err)
+	}
+	return s, nil
+}
+
 // Close closes the database connection.
 func (s *Store) Close() error {
 	return s.db.Close()
@@ -234,6 +244,8 @@ CREATE TABLE IF NOT EXISTS work_comments (
     body TEXT NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE work_projects ADD COLUMN IF NOT EXISTS owner_id TEXT;
 `
 	_, err := s.db.Exec(ddl)
 	return err
@@ -255,17 +267,18 @@ func newID() string {
 // Projects
 // ────────────────────────────────────────────────────────────────────
 
-// CreateProject creates a new project.
-func (s *Store) CreateProject(ctx context.Context, name, description, owner string) (*Project, error) {
+// CreateProject creates a new project owned by the given user.
+func (s *Store) CreateProject(ctx context.Context, name, description, ownerName, ownerID string) (*Project, error) {
 	p := &Project{
 		ID:          newID(),
 		Name:        name,
 		Description: description,
-		Owner:       owner,
+		Owner:       ownerName,
+		OwnerID:     ownerID,
 	}
 	err := s.db.QueryRowContext(ctx,
-		`INSERT INTO work_projects (id, name, description, owner) VALUES ($1, $2, $3, $4) RETURNING created_at`,
-		p.ID, p.Name, p.Description, p.Owner,
+		`INSERT INTO work_projects (id, name, description, owner, owner_id) VALUES ($1, $2, $3, $4, $5) RETURNING created_at`,
+		p.ID, p.Name, p.Description, p.Owner, p.OwnerID,
 	).Scan(&p.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("create project: %w", err)
@@ -273,10 +286,11 @@ func (s *Store) CreateProject(ctx context.Context, name, description, owner stri
 	return p, nil
 }
 
-// ListProjects returns all projects ordered by creation time.
-func (s *Store) ListProjects(ctx context.Context) ([]Project, error) {
+// ListProjects returns projects owned by the given user.
+func (s *Store) ListProjects(ctx context.Context, ownerID string) ([]Project, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, description, owner, created_at FROM work_projects ORDER BY created_at`)
+		`SELECT id, name, description, owner, COALESCE(owner_id, ''), created_at
+		 FROM work_projects WHERE owner_id = $1 ORDER BY created_at`, ownerID)
 	if err != nil {
 		return nil, fmt.Errorf("list projects: %w", err)
 	}
@@ -285,7 +299,7 @@ func (s *Store) ListProjects(ctx context.Context) ([]Project, error) {
 	var projects []Project
 	for rows.Next() {
 		var p Project
-		if err := rows.Scan(&p.ID, &p.Name, &p.Description, &p.Owner, &p.CreatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Description, &p.Owner, &p.OwnerID, &p.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan project: %w", err)
 		}
 		projects = append(projects, p)
@@ -297,8 +311,8 @@ func (s *Store) ListProjects(ctx context.Context) ([]Project, error) {
 func (s *Store) GetProject(ctx context.Context, id string) (*Project, error) {
 	var p Project
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, name, description, owner, created_at FROM work_projects WHERE id = $1`, id,
-	).Scan(&p.ID, &p.Name, &p.Description, &p.Owner, &p.CreatedAt)
+		`SELECT id, name, description, owner, COALESCE(owner_id, ''), created_at FROM work_projects WHERE id = $1`, id,
+	).Scan(&p.ID, &p.Name, &p.Description, &p.Owner, &p.OwnerID, &p.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}

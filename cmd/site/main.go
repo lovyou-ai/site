@@ -2,6 +2,7 @@
 package main
 
 import (
+	"database/sql"
 	"flag"
 	"fmt"
 	"log"
@@ -10,6 +11,9 @@ import (
 	"strconv"
 	"strings"
 
+	_ "github.com/lib/pq"
+
+	"github.com/lovyou-ai/site/auth"
 	"github.com/lovyou-ai/site/content"
 	"github.com/lovyou-ai/site/views"
 	"github.com/lovyou-ai/site/work"
@@ -114,15 +118,56 @@ func main() {
 		http.NotFound(w, r)
 	})
 
-	// Work product.
+	// Work product with auth.
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn != "" {
-		workStore, err := work.New(dsn)
+		db, err := sql.Open("postgres", dsn)
+		if err != nil {
+			log.Fatalf("open db: %v", err)
+		}
+		defer db.Close()
+		if err := db.Ping(); err != nil {
+			log.Fatalf("ping db: %v", err)
+		}
+
+		// Auth middleware: Google OAuth if configured, otherwise anonymous passthrough.
+		var wrap func(http.HandlerFunc) http.Handler
+		clientID := os.Getenv("GOOGLE_CLIENT_ID")
+		clientSecret := os.Getenv("GOOGLE_CLIENT_SECRET")
+
+		if clientID != "" && clientSecret != "" {
+			// Derive redirect URL: use AUTH_REDIRECT_URL or default to /auth/callback.
+			redirectURL := os.Getenv("AUTH_REDIRECT_URL")
+			if redirectURL == "" {
+				redirectURL = "https://lovyou.ai/auth/callback"
+			}
+			secure := redirectURL[:5] == "https"
+
+			authService, err := auth.New(db, clientID, clientSecret, redirectURL, secure)
+			if err != nil {
+				log.Fatalf("auth: %v", err)
+			}
+			authService.Register(mux)
+			wrap = authService.RequireAuth
+			log.Println("auth enabled (Google OAuth)")
+		} else {
+			// Dev mode: no auth, inject anonymous user.
+			wrap = func(next http.HandlerFunc) http.Handler {
+				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					ctx := auth.ContextWithUser(r.Context(), &auth.User{
+						ID: "anonymous", Name: "Anonymous", Email: "anon@lovyou.ai",
+					})
+					next.ServeHTTP(w, r.WithContext(ctx))
+				})
+			}
+			log.Println("auth disabled (no GOOGLE_CLIENT_ID) — anonymous mode")
+		}
+
+		workStore, err := work.NewWithDB(db)
 		if err != nil {
 			log.Fatalf("work store: %v", err)
 		}
-		defer workStore.Close()
-		workHandlers := work.NewHandlers(workStore)
+		workHandlers := work.NewHandlers(workStore, wrap)
 		workHandlers.Register(mux)
 		log.Println("work product enabled (DATABASE_URL set)")
 	} else {

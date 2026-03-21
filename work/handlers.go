@@ -6,36 +6,89 @@ import (
 	"log"
 	"net/http"
 	"strings"
+
+	"github.com/lovyou-ai/site/auth"
 )
+
+// ViewUser holds user info for templates.
+type ViewUser struct {
+	Name    string
+	Picture string
+}
 
 // Handlers serves the Work product HTTP endpoints.
 type Handlers struct {
 	store *Store
+	wrap  func(http.HandlerFunc) http.Handler
 }
 
-// NewHandlers creates Work product handlers backed by the given store.
-func NewHandlers(store *Store) *Handlers {
-	return &Handlers{store: store}
+// NewHandlers creates Work product handlers with auth middleware.
+// The wrap function is applied to every route for authentication.
+func NewHandlers(store *Store, wrap func(http.HandlerFunc) http.Handler) *Handlers {
+	if wrap == nil {
+		wrap = func(hf http.HandlerFunc) http.Handler { return hf }
+	}
+	return &Handlers{store: store, wrap: wrap}
 }
 
 // Register adds all /work routes to the mux.
 func (h *Handlers) Register(mux *http.ServeMux) {
 	// Pages.
-	mux.HandleFunc("GET /work", h.handleIndex)
-	mux.HandleFunc("GET /work/project/{id}", h.handleBoard)
-	mux.HandleFunc("GET /work/project/{id}/list", h.handleList)
-	mux.HandleFunc("GET /work/task/{id}", h.handleTaskDetail)
+	mux.Handle("GET /work", h.wrap(h.handleIndex))
+	mux.Handle("GET /work/project/{id}", h.wrap(h.handleBoard))
+	mux.Handle("GET /work/project/{id}/list", h.wrap(h.handleList))
+	mux.Handle("GET /work/task/{id}", h.wrap(h.handleTaskDetail))
 
 	// Mutations.
-	mux.HandleFunc("POST /work/project", h.handleCreateProject)
-	mux.HandleFunc("POST /work/task", h.handleCreateTask)
-	mux.HandleFunc("POST /work/task/{id}/state", h.handleTransitionTask)
-	mux.HandleFunc("POST /work/task/{id}/update", h.handleUpdateTask)
-	mux.HandleFunc("POST /work/task/{id}/comment", h.handleAddComment)
-	mux.HandleFunc("DELETE /work/task/{id}", h.handleDeleteTask)
+	mux.Handle("POST /work/project", h.wrap(h.handleCreateProject))
+	mux.Handle("POST /work/task", h.wrap(h.handleCreateTask))
+	mux.Handle("POST /work/task/{id}/state", h.wrap(h.handleTransitionTask))
+	mux.Handle("POST /work/task/{id}/update", h.wrap(h.handleUpdateTask))
+	mux.Handle("POST /work/task/{id}/comment", h.wrap(h.handleAddComment))
+	mux.Handle("DELETE /work/task/{id}", h.wrap(h.handleDeleteTask))
 
 	// API.
-	mux.HandleFunc("GET /work/api/tasks", h.handleAPITasks)
+	mux.Handle("GET /work/api/tasks", h.wrap(h.handleAPITasks))
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Helpers
+// ────────────────────────────────────────────────────────────────────
+
+func (h *Handlers) viewUser(r *http.Request) ViewUser {
+	u := auth.UserFromContext(r.Context())
+	if u == nil {
+		return ViewUser{Name: "Anonymous"}
+	}
+	return ViewUser{Name: u.Name, Picture: u.Picture}
+}
+
+func (h *Handlers) userID(r *http.Request) string {
+	u := auth.UserFromContext(r.Context())
+	if u == nil {
+		return "anonymous"
+	}
+	return u.ID
+}
+
+func (h *Handlers) userName(r *http.Request) string {
+	u := auth.UserFromContext(r.Context())
+	if u == nil {
+		return "anonymous"
+	}
+	return u.Name
+}
+
+// verifyProjectAccess checks that the user owns the project.
+func (h *Handlers) verifyProjectAccess(r *http.Request, projectID string) (*Project, error) {
+	project, err := h.store.GetProject(r.Context(), projectID)
+	if err != nil {
+		return nil, err
+	}
+	if project.OwnerID != "" && project.OwnerID != h.userID(r) {
+		return nil, ErrNotFound
+	}
+	return project, nil
 }
 
 // ────────────────────────────────────────────────────────────────────
@@ -45,19 +98,17 @@ func (h *Handlers) Register(mux *http.ServeMux) {
 func (h *Handlers) handleIndex(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	projects, err := h.store.ListProjects(ctx)
+	projects, err := h.store.ListProjects(ctx, h.userID(r))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	if len(projects) == 0 {
-		// Onboarding: show create-project form.
-		WorkOnboarding().Render(ctx, w)
+		WorkOnboarding(h.viewUser(r)).Render(ctx, w)
 		return
 	}
 
-	// Redirect to first project's board.
 	http.Redirect(w, r, "/work/project/"+projects[0].ID, http.StatusSeeOther)
 }
 
@@ -65,7 +116,7 @@ func (h *Handlers) handleBoard(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	projectID := r.PathValue("id")
 
-	project, err := h.store.GetProject(ctx, projectID)
+	project, err := h.verifyProjectAccess(r, projectID)
 	if errors.Is(err, ErrNotFound) {
 		http.NotFound(w, r)
 		return
@@ -75,7 +126,7 @@ func (h *Handlers) handleBoard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	projects, err := h.store.ListProjects(ctx)
+	projects, err := h.store.ListProjects(ctx, h.userID(r))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -90,17 +141,15 @@ func (h *Handlers) handleBoard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Group tasks by state.
 	columns := groupByState(tasks)
-
-	WorkBoard(*project, projects, columns).Render(ctx, w)
+	WorkBoard(*project, projects, columns, h.viewUser(r)).Render(ctx, w)
 }
 
 func (h *Handlers) handleList(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	projectID := r.PathValue("id")
 
-	project, err := h.store.GetProject(ctx, projectID)
+	project, err := h.verifyProjectAccess(r, projectID)
 	if errors.Is(err, ErrNotFound) {
 		http.NotFound(w, r)
 		return
@@ -110,13 +159,12 @@ func (h *Handlers) handleList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	projects, err := h.store.ListProjects(ctx)
+	projects, err := h.store.ListProjects(ctx, h.userID(r))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// Apply filters from query params.
 	params := ListTasksParams{
 		ProjectID: projectID,
 		ParentID:  "root",
@@ -134,7 +182,7 @@ func (h *Handlers) handleList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	WorkList(*project, projects, tasks).Render(ctx, w)
+	WorkList(*project, projects, tasks, h.viewUser(r)).Render(ctx, w)
 }
 
 func (h *Handlers) handleTaskDetail(w http.ResponseWriter, r *http.Request) {
@@ -151,7 +199,11 @@ func (h *Handlers) handleTaskDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	project, err := h.store.GetProject(ctx, task.ProjectID)
+	project, err := h.verifyProjectAccess(r, task.ProjectID)
+	if errors.Is(err, ErrNotFound) {
+		http.NotFound(w, r)
+		return
+	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -178,7 +230,7 @@ func (h *Handlers) handleTaskDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	WorkTaskDetail(*project, *task, comments, subtasks, blockers).Render(ctx, w)
+	WorkTaskDetail(*project, *task, comments, subtasks, blockers, h.viewUser(r)).Render(ctx, w)
 }
 
 // ────────────────────────────────────────────────────────────────────
@@ -190,17 +242,13 @@ func (h *Handlers) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 
 	name := strings.TrimSpace(r.FormValue("name"))
 	description := strings.TrimSpace(r.FormValue("description"))
-	owner := strings.TrimSpace(r.FormValue("owner"))
-	if owner == "" {
-		owner = "anonymous"
-	}
 
 	if name == "" {
 		http.Error(w, "project name is required", http.StatusBadRequest)
 		return
 	}
 
-	project, err := h.store.CreateProject(ctx, name, description, owner)
+	project, err := h.store.CreateProject(ctx, name, description, h.userName(r), h.userID(r))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -218,24 +266,25 @@ func (h *Handlers) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	projectID := r.FormValue("project_id")
+	if _, err := h.verifyProjectAccess(r, projectID); err != nil {
+		http.Error(w, "project not found", http.StatusNotFound)
+		return
+	}
+
 	priority := r.FormValue("priority")
 	if priority == "" {
 		priority = PriorityMedium
-	}
-
-	createdBy := strings.TrimSpace(r.FormValue("created_by"))
-	if createdBy == "" {
-		createdBy = "anonymous"
 	}
 
 	params := CreateTaskParams{
 		Title:       title,
 		Description: strings.TrimSpace(r.FormValue("description")),
 		Priority:    priority,
-		ProjectID:   r.FormValue("project_id"),
+		ProjectID:   projectID,
 		ParentID:    r.FormValue("parent_id"),
 		Assignee:    strings.TrimSpace(r.FormValue("assignee")),
-		CreatedBy:   createdBy,
+		CreatedBy:   h.userName(r),
 	}
 
 	task, err := h.store.CreateTask(ctx, params)
@@ -245,13 +294,11 @@ func (h *Handlers) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// HTMX request: return the task card fragment.
 	if isHTMX(r) {
 		TaskCard(*task).Render(ctx, w)
 		return
 	}
 
-	// Standard form submit: redirect to board.
 	http.Redirect(w, r, "/work/project/"+task.ProjectID, http.StatusSeeOther)
 }
 
@@ -259,6 +306,21 @@ func (h *Handlers) handleTransitionTask(w http.ResponseWriter, r *http.Request) 
 	ctx := r.Context()
 	taskID := r.PathValue("id")
 	newState := r.FormValue("state")
+
+	// Verify access.
+	task, err := h.store.GetTask(ctx, taskID)
+	if errors.Is(err, ErrNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if _, err := h.verifyProjectAccess(r, task.ProjectID); err != nil {
+		http.NotFound(w, r)
+		return
+	}
 
 	if err := h.store.TransitionTask(ctx, taskID, newState); err != nil {
 		if errors.Is(err, ErrNotFound) {
@@ -273,7 +335,7 @@ func (h *Handlers) handleTransitionTask(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	task, err := h.store.GetTask(ctx, taskID)
+	task, err = h.store.GetTask(ctx, taskID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -289,6 +351,21 @@ func (h *Handlers) handleTransitionTask(w http.ResponseWriter, r *http.Request) 
 func (h *Handlers) handleUpdateTask(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	taskID := r.PathValue("id")
+
+	// Verify access.
+	task, err := h.store.GetTask(ctx, taskID)
+	if errors.Is(err, ErrNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if _, err := h.verifyProjectAccess(r, task.ProjectID); err != nil {
+		http.NotFound(w, r)
+		return
+	}
 
 	params := UpdateTaskParams{}
 	if v := r.FormValue("title"); v != "" {
@@ -314,7 +391,7 @@ func (h *Handlers) handleUpdateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	task, err := h.store.GetTask(ctx, taskID)
+	task, err = h.store.GetTask(ctx, taskID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -332,16 +409,27 @@ func (h *Handlers) handleAddComment(w http.ResponseWriter, r *http.Request) {
 	taskID := r.PathValue("id")
 
 	body := strings.TrimSpace(r.FormValue("body"))
-	author := strings.TrimSpace(r.FormValue("author"))
-	if author == "" {
-		author = "anonymous"
-	}
 	if body == "" {
 		http.Error(w, "comment body is required", http.StatusBadRequest)
 		return
 	}
 
-	comment, err := h.store.AddComment(ctx, taskID, author, body)
+	// Verify access.
+	task, err := h.store.GetTask(ctx, taskID)
+	if errors.Is(err, ErrNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if _, err := h.verifyProjectAccess(r, task.ProjectID); err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	comment, err := h.store.AddComment(ctx, taskID, h.userName(r), body)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -358,7 +446,6 @@ func (h *Handlers) handleDeleteTask(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	taskID := r.PathValue("id")
 
-	// Get task before deleting so we know the project for redirect.
 	task, err := h.store.GetTask(ctx, taskID)
 	if errors.Is(err, ErrNotFound) {
 		http.NotFound(w, r)
@@ -366,6 +453,10 @@ func (h *Handlers) handleDeleteTask(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if _, err := h.verifyProjectAccess(r, task.ProjectID); err != nil {
+		http.NotFound(w, r)
 		return
 	}
 
@@ -395,6 +486,11 @@ func (h *Handlers) handleAPITasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if _, err := h.verifyProjectAccess(r, projectID); err != nil {
+		http.Error(w, "project not found", http.StatusNotFound)
+		return
+	}
+
 	params := ListTasksParams{
 		ProjectID: projectID,
 		ParentID:  "root",
@@ -414,7 +510,7 @@ func (h *Handlers) handleAPITasks(w http.ResponseWriter, r *http.Request) {
 }
 
 // ────────────────────────────────────────────────────────────────────
-// Helpers
+// Board helpers
 // ────────────────────────────────────────────────────────────────────
 
 // BoardColumn holds tasks grouped by state for the kanban board.

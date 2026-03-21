@@ -8,7 +8,7 @@ import "fmt"
 // own HTML shell rather than composing with views.Layout because
 // the Work product needs a sidebar + full-width main area.
 
-templ workLayout(projects []Project, currentProjectID string, title string) {
+templ workLayout(projects []Project, currentProjectID string, title string, user ViewUser) {
 	<!DOCTYPE html>
 	<html lang="en">
 		<head>
@@ -32,10 +32,25 @@ templ workLayout(projects []Project, currentProjectID string, title string) {
 						<span class="text-gray-300">/</span>
 						<a href="/work" class="text-sm font-medium hover:text-brand transition-colors">Work</a>
 					</div>
-					<div class="flex gap-6 text-sm">
+					<div class="flex items-center gap-6 text-sm">
 						<a href="/" class="hover:text-brand">Home</a>
 						<a href="/blog" class="hover:text-brand">Blog</a>
 						<a href="/reference" class="hover:text-brand">Reference</a>
+						if user.Name != "" && user.Name != "Anonymous" {
+							<div class="flex items-center gap-2 ml-2 pl-4 border-l border-gray-200">
+								if user.Picture != "" {
+									<img src={ user.Picture } class="w-6 h-6 rounded-full" alt={ user.Name } referrerpolicy="no-referrer"/>
+								} else {
+									<span class="w-6 h-6 rounded-full bg-brand/10 text-brand text-xs font-bold flex items-center justify-center">
+										{ assigneeInitial(user.Name) }
+									</span>
+								}
+								<span class="text-gray-600 text-xs">{ user.Name }</span>
+								<form method="POST" action="/auth/logout">
+									<button type="submit" class="text-xs text-gray-400 hover:text-red-500 transition-colors">Logout</button>
+								</form>
+							</div>
+						}
 					</div>
 				</nav>
 			</header>
@@ -123,7 +138,7 @@ templ workLayout(projects []Project, currentProjectID string, title string) {
 
 // ── Onboarding ─────────────────────────────────────────────────
 
-templ WorkOnboarding() {
+templ WorkOnboarding(user ViewUser) {
 	<!DOCTYPE html>
 	<html lang="en">
 		<head>
@@ -143,10 +158,18 @@ templ WorkOnboarding() {
 			<header class="border-b border-gray-200 bg-white">
 				<nav class="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
 					<a href="/" class="text-xl font-bold text-brand">lovyou.ai</a>
-					<div class="flex gap-6 text-sm">
+					<div class="flex items-center gap-6 text-sm">
 						<a href="/" class="hover:text-brand">Home</a>
 						<a href="/blog" class="hover:text-brand">Blog</a>
 						<a href="/reference" class="hover:text-brand">Reference</a>
+						if user.Name != "" && user.Name != "Anonymous" {
+							<div class="flex items-center gap-2 ml-2 pl-4 border-l border-gray-200">
+								if user.Picture != "" {
+									<img src={ user.Picture } class="w-6 h-6 rounded-full" alt={ user.Name } referrerpolicy="no-referrer"/>
+								}
+								<span class="text-gray-600 text-xs">{ user.Name }</span>
+							</div>
+						}
 					</div>
 				</nav>
 			</header>
@@ -208,8 +231,8 @@ templ WorkOnboarding() {
 
 // ── Board view (kanban) ────────────────────────────────────────
 
-templ WorkBoard(project Project, projects []Project, columns []BoardColumn) {
-	@workLayout(projects, project.ID, project.Name) {
+templ WorkBoard(project Project, projects []Project, columns []BoardColumn, user ViewUser) {
+	@workLayout(projects, project.ID, project.Name, user) {
 		<div class="p-6 h-full flex flex-col">
 			<!-- Header -->
 			<div class="flex items-center justify-between mb-6">
@@ -358,7 +381,6 @@ templ newTaskInline(projectID string) {
 			class="bg-white rounded-lg border border-gray-200 shadow-sm p-3 space-y-2"
 		>
 			<input type="hidden" name="project_id" value={ projectID }/>
-			<input type="hidden" name="created_by" value="web"/>
 			<input
 				type="text"
 				name="title"
@@ -397,8 +419,8 @@ templ newTaskInline(projectID string) {
 
 // ── List view ──────────────────────────────────────────────────
 
-templ WorkList(project Project, projects []Project, tasks []Task) {
-	@workLayout(projects, project.ID, project.Name) {
+templ WorkList(project Project, projects []Project, tasks []Task, user ViewUser) {
+	@workLayout(projects, project.ID, project.Name, user) {
 		<div class="p-6">
 			<!-- Header -->
 			<div class="flex items-center justify-between mb-6">
@@ -506,8 +528,8 @@ templ taskListRow(task Task) {
 
 // ── Task detail ────────────────────────────────────────────────
 
-templ WorkTaskDetail(project Project, task Task, comments []Comment, subtasks []Task, blockers []Task) {
-	@workLayout([]Project{project}, task.ProjectID, task.Title) {
+templ WorkTaskDetail(project Project, task Task, comments []Comment, subtasks []Task, blockers []Task, user ViewUser) {
+	@workLayout([]Project{project}, task.ProjectID, task.Title, user) {
 		<div class="max-w-3xl mx-auto p-6 space-y-8">
 			<!-- Breadcrumb -->
 			<div class="text-sm">
@@ -698,8 +720,7 @@ templ WorkTaskDetail(project Project, task Task, comments []Comment, subtasks []
 				<form method="POST" action="/work/task" class="flex gap-2">
 					<input type="hidden" name="project_id" value={ project.ID }/>
 					<input type="hidden" name="parent_id" value={ task.ID }/>
-					<input type="hidden" name="created_by" value="web"/>
-					<input type="text" name="title" required
+							<input type="text" name="title" required
 						class="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent text-sm"
 						placeholder="Subtask title..."/>
 					<button type="submit"
