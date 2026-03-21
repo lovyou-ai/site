@@ -1,4 +1,4 @@
-site
-site.exe
+/site
+/site.exe
 *.exe~
 static/css/output.css
