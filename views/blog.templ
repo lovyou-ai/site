@@ -10,10 +10,17 @@ type Post struct {
 	Body    string
 }
 
+// PostNav holds optional prev/next links for a blog post.
+type PostNav struct {
+	Prev *Post
+	Next *Post
+}
+
 templ BlogIndex(posts []Post) {
 	@Layout("Blog") {
 		<div class="space-y-8">
 			<h1 class="text-3xl font-bold">Blog</h1>
+			<p class="text-gray-600">A series on EventGraph, AI consciousness, and the architecture of accountable systems. Best read in order.</p>
 			if len(posts) == 0 {
 				<p class="text-gray-500">No posts yet.</p>
 			}
@@ -26,25 +33,46 @@ templ BlogIndex(posts []Post) {
 
 templ blogCard(post Post) {
 	<a href={ templ.SafeURL("/blog/" + post.Slug) } class="block p-6 bg-white rounded-lg border border-gray-200 hover:border-brand hover:shadow-md transition-all">
-		<time class="text-sm text-gray-400">{ post.Date.Format("2 January 2006") }</time>
+		<time class="text-sm text-gray-400">{ post.Date.Format("January 2006") }</time>
 		<h2 class="text-xl font-semibold mt-1">{ post.Title }</h2>
 		<p class="text-gray-600 mt-2">{ post.Summary }</p>
 	</a>
 }
 
-templ BlogPost(post Post) {
+templ BlogPost(post Post, nav PostNav) {
 	@Layout(post.Title) {
 		<article class="space-y-6">
 			<div>
-				<a href="/blog" class="text-sm text-brand hover:underline">&larr; Back to blog</a>
+				<a href="/blog" class="text-sm text-brand hover:underline">&larr; All posts</a>
 			</div>
 			<header>
-				<time class="text-sm text-gray-400">{ post.Date.Format("2 January 2006") }</time>
+				<time class="text-sm text-gray-400">{ post.Date.Format("January 2006") }</time>
 				<h1 class="text-3xl font-bold mt-1">{ post.Title }</h1>
+				if post.Summary != "" {
+					<p class="text-lg text-gray-500 mt-2 italic">{ post.Summary }</p>
+				}
 			</header>
-			<div class="prose prose-gray max-w-none">
+			<div class="prose max-w-none">
 				@templ.Raw(post.Body)
 			</div>
+			<nav class="border-t border-gray-200 pt-6 mt-8 flex justify-between items-start gap-4">
+				<div class="flex-1">
+					if nav.Prev != nil {
+						<a href={ templ.SafeURL("/blog/" + nav.Prev.Slug) } class="group">
+							<span class="text-sm text-gray-400 group-hover:text-brand">&larr; Previous</span>
+							<span class="block text-brand font-medium group-hover:underline">{ nav.Prev.Title }</span>
+						</a>
+					}
+				</div>
+				<div class="flex-1 text-right">
+					if nav.Next != nil {
+						<a href={ templ.SafeURL("/blog/" + nav.Next.Slug) } class="group">
+							<span class="text-sm text-gray-400 group-hover:text-brand">Next &rarr;</span>
+							<span class="block text-brand font-medium group-hover:underline">{ nav.Next.Title }</span>
+						</a>
+					}
+				</div>
+			</nav>
 		</article>
 	}
 }

@@ -23,7 +23,7 @@ var (
 	postNum   = regexp.MustCompile(`^post(\d+)`)
 )
 
-// LoadPosts reads all embedded markdown posts and returns them newest-first.
+// LoadPosts reads all embedded markdown posts and returns them in chronological order.
 func LoadPosts() ([]views.Post, error) {
 	entries, err := postsFS.ReadDir("posts")
 	if err != nil {
@@ -51,7 +51,7 @@ func LoadPosts() ([]views.Post, error) {
 	}
 
 	sort.Slice(posts, func(i, j int) bool {
-		return posts[i].Date.After(posts[j].Date)
+		return posts[i].Date.Before(posts[j].Date)
 	})
 
 	return posts, nil
@@ -69,29 +69,9 @@ func parsePost(md goldmark.Markdown, filename string, raw []byte) (views.Post, e
 		}
 	}
 
-	// Summary: first line wrapped in *...*  (italic)
-	var summary string
-	for _, l := range lines {
-		l = strings.TrimSpace(l)
-		if strings.HasPrefix(l, "*") && strings.HasSuffix(l, "*") && len(l) > 2 {
-			summary = strings.Trim(l, "*")
-			break
-		}
-	}
-	// Fallback: use the first non-empty, non-title, non-author line
-	if summary == "" {
-		for _, l := range lines {
-			l = strings.TrimSpace(l)
-			if l == "" || strings.HasPrefix(l, "#") || strings.HasPrefix(l, "---") || strings.Contains(l, "·") {
-				continue
-			}
-			summary = l
-			if len(summary) > 200 {
-				summary = summary[:200] + "..."
-			}
-			break
-		}
-	}
+	// Summary: the subtitle line (line after the title, before the author).
+	// Formats vary: *italic*, _italic_, ## heading, plain text.
+	summary := extractSummary(lines)
 
 	// Date: parse "· Month Year" from byline
 	date := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
@@ -154,6 +134,58 @@ func findBodyStart(lines []string) int {
 		}
 	}
 	return 0
+}
+
+// extractSummary finds the subtitle line between the title and the author/separator.
+func extractSummary(lines []string) string {
+	// Find the title line, then look at the lines between it and the author/separator.
+	titleIdx := -1
+	for i, l := range lines {
+		if strings.HasPrefix(l, "# ") {
+			titleIdx = i
+			break
+		}
+	}
+	if titleIdx < 0 {
+		return ""
+	}
+
+	// Scan lines after title, looking for the subtitle before we hit author or separator.
+	for i := titleIdx + 1; i < len(lines) && i < titleIdx+6; i++ {
+		l := strings.TrimSpace(lines[i])
+		if l == "" {
+			continue
+		}
+		// Stop at separators and author lines.
+		if l == "---" {
+			continue
+		}
+		if strings.Contains(l, "·") || strings.Contains(l, "|") && strings.Contains(l, "2026") {
+			break
+		}
+		if strings.HasPrefix(l, "**Matt") || strings.HasPrefix(l, "Matt Searles") || strings.HasPrefix(l, "+Claude") {
+			break
+		}
+
+		// Strip markdown formatting markers.
+		s := l
+		// Bold+italic: ***text***, ___text___
+		for _, wrap := range []string{"***", "___", "**", "__", "*", "_"} {
+			if strings.HasPrefix(s, wrap) && strings.HasSuffix(s, wrap) && len(s) > 2*len(wrap) {
+				s = s[len(wrap) : len(s)-len(wrap)]
+				break
+			}
+		}
+		// Strip ## heading prefix
+		s = strings.TrimPrefix(s, "## ")
+		s = strings.TrimSpace(s)
+
+		if len(s) > 200 {
+			s = s[:200] + "..."
+		}
+		return s
+	}
+	return ""
 }
 
 func parseMonth(s string) time.Month {

@@ -68,9 +68,16 @@ func makeHandlers(posts []views.Post) (home, blogIndex, blogPost http.HandlerFun
 	}
 	blogPost = func(w http.ResponseWriter, r *http.Request) {
 		slug := r.PathValue("slug")
-		for _, post := range posts {
+		for i, post := range posts {
 			if post.Slug == slug {
-				views.BlogPost(post).Render(r.Context(), w)
+				var nav views.PostNav
+				if i > 0 {
+					nav.Prev = &posts[i-1]
+				}
+				if i < len(posts)-1 {
+					nav.Next = &posts[i+1]
+				}
+				views.BlogPost(post, nav).Render(r.Context(), w)
 				return
 			}
 		}
