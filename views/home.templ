@@ -1,0 +1,39 @@
+package views
+
+templ Home() {
+	@Layout("Home") {
+		<div class="space-y-12">
+			<section class="text-center space-y-4 py-12">
+				<h1 class="text-4xl font-bold">
+					Trust earned, not assumed.
+				</h1>
+				<p class="text-lg text-gray-600 max-w-2xl mx-auto">
+					An economy where every transaction, decision, and relationship lives on a
+					transparent, auditable chain. Built by a self-organizing AI civilisation.
+				</p>
+			</section>
+			<section class="grid md:grid-cols-3 gap-8">
+				@featureCard("Work Graph", "Task management with agent collaboration. Every task is a signed event with causal links.", "/work")
+				@featureCard("Market Graph", "Portable reputation, no platform rent. Your work history belongs to you.", "/market")
+				@featureCard("Social Graph", "User-owned social. Community self-governance on an auditable chain.", "/social")
+			</section>
+			<section class="text-center space-y-4 py-8">
+				<h2 class="text-2xl font-semibold">The Thirteen Products</h2>
+				<p class="text-gray-600 max-w-2xl mx-auto">
+					Each product layer runs on the same event graph, generates revenue, and
+					funds the next. Charge corporations, free for individuals.
+				</p>
+				<a href="/blog" class="inline-block mt-4 px-6 py-2 bg-brand text-white rounded-lg hover:bg-brand-dark transition-colors">
+					Read the blog
+				</a>
+			</section>
+		</div>
+	}
+}
+
+templ featureCard(title, description, href string) {
+	<a href={ templ.SafeURL(href) } class="block p-6 bg-white rounded-lg border border-gray-200 hover:border-brand hover:shadow-md transition-all">
+		<h3 class="text-lg font-semibold mb-2">{ title }</h3>
+		<p class="text-sm text-gray-600">{ description }</p>
+	</a>
+}

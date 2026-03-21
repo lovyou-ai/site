@@ -1,0 +1,50 @@
+package views
+
+import "time"
+
+type Post struct {
+	Slug    string
+	Title   string
+	Summary string
+	Date    time.Time
+	Body    string
+}
+
+templ BlogIndex(posts []Post) {
+	@Layout("Blog") {
+		<div class="space-y-8">
+			<h1 class="text-3xl font-bold">Blog</h1>
+			if len(posts) == 0 {
+				<p class="text-gray-500">No posts yet.</p>
+			}
+			for _, post := range posts {
+				@blogCard(post)
+			}
+		</div>
+	}
+}
+
+templ blogCard(post Post) {
+	<a href={ templ.SafeURL("/blog/" + post.Slug) } class="block p-6 bg-white rounded-lg border border-gray-200 hover:border-brand hover:shadow-md transition-all">
+		<time class="text-sm text-gray-400">{ post.Date.Format("2 January 2006") }</time>
+		<h2 class="text-xl font-semibold mt-1">{ post.Title }</h2>
+		<p class="text-gray-600 mt-2">{ post.Summary }</p>
+	</a>
+}
+
+templ BlogPost(post Post) {
+	@Layout(post.Title) {
+		<article class="space-y-6">
+			<div>
+				<a href="/blog" class="text-sm text-brand hover:underline">&larr; Back to blog</a>
+			</div>
+			<header>
+				<time class="text-sm text-gray-400">{ post.Date.Format("2 January 2006") }</time>
+				<h1 class="text-3xl font-bold mt-1">{ post.Title }</h1>
+			</header>
+			<div class="prose prose-gray max-w-none">
+				@templ.Raw(post.Body)
+			</div>
+		</article>
+	}
+}
