@@ -56,17 +56,10 @@ func LoadLayers() []views.Layer {
 	productDescs := parseProductLayers()
 	for i := range layers {
 		if desc, ok := productDescs[layers[i].Number]; ok {
-			layers[i].Description = desc
-		}
-	}
-
-	// 4. Enrich layer descriptions from per-layer derivation docs.
-	for i := range layers {
-		if derivation := parseLayerDerivation(layers[i].Number); derivation != "" {
 			if layers[i].Description != "" {
-				layers[i].Description += "\n" + derivation
+				layers[i].Description += "\n" + desc
 			} else {
-				layers[i].Description = derivation
+				layers[i].Description = desc
 			}
 		}
 	}
@@ -377,61 +370,6 @@ func parseProductLayers() map[int]string {
 	}
 	flush()
 	return result
-}
-
-// parseLayerDerivation reads the per-layer derivation doc and returns rendered HTML.
-func parseLayerDerivation(layerNum int) string {
-	filenames := []string{
-		"00-foundation.md", "01-agency.md", "02-exchange.md", "03-society.md",
-		"04-legal.md", "05-technology.md", "06-information.md", "07-ethics.md",
-		"08-identity.md", "09-relationship.md", "10-community.md", "11-culture.md",
-		"12-emergence.md", "13-existence.md",
-	}
-	if layerNum < 0 || layerNum >= len(filenames) {
-		return ""
-	}
-
-	raw, err := layerDocsFS.ReadFile("reference/layers/" + filenames[layerNum])
-	if err != nil {
-		return ""
-	}
-
-	// Extract the derivation section (everything up to the first primitive spec).
-	lines := strings.Split(string(raw), "\n")
-	var derivLines []string
-	pastTitle := false
-	for _, line := range lines {
-		line = strings.TrimRight(line, "\r")
-		// Skip the # title.
-		if strings.HasPrefix(line, "# ") && !pastTitle {
-			pastTitle = true
-			continue
-		}
-		if !pastTitle {
-			continue
-		}
-		// Stop at the first primitive spec (### heading that's not a derivation section).
-		// Derivation sections use ## headings; primitive specs use ### headings.
-		// For foundation (Layer 0), stop at "## Group 0".
-		// For other layers, stop at "### Group 0".
-		if layerNum == 0 && strings.HasPrefix(line, "## Group") {
-			break
-		}
-		if layerNum > 0 && strings.HasPrefix(line, "## Primitives") {
-			break
-		}
-		// Also stop at dimensional analysis table continuation (we want the narrative).
-		derivLines = append(derivLines, line)
-	}
-
-	if len(derivLines) == 0 {
-		return ""
-	}
-
-	md := strings.Join(derivLines, "\n")
-	var buf bytes.Buffer
-	primMD.Convert([]byte(md), &buf)
-	return buf.String()
 }
 
 // LoadAgentPrimitives parses agent-primitives.md into primitives.
