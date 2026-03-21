@@ -27,11 +27,12 @@ type RefPage struct {
 
 // Layer is a product layer with its primitives.
 type Layer struct {
-	Number     int
-	Name       string
-	Gap        string
-	Transition string
-	Primitives []Primitive
+	Number      int
+	Name        string
+	Gap         string
+	Transition  string
+	Description string // rendered HTML from product-layers + derivation docs
+	Primitives  []Primitive
 }
 
 // Primitive is an individual cognitive primitive.
@@ -42,6 +43,7 @@ type Primitive struct {
 	LayerName    string
 	Group        string
 	Description  string
+	Notes        string // additional body text after spec table
 	SubscribesTo string
 	Emits        string
 	DependsOn    string

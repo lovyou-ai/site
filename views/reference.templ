@@ -36,6 +36,11 @@ templ layerSection(layer Layer) {
 		if layer.Gap != "" {
 			<p class="text-gray-600 text-sm mb-3">{ layer.Gap }</p>
 		}
+		if layer.Description != "" {
+			<div class="prose prose-sm max-w-none mb-4 text-gray-600">
+				@templ.Raw(layer.Description)
+			</div>
+		}
 		<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
 			for _, prim := range layer.Primitives {
 				<a
@@ -126,6 +131,11 @@ templ PrimitivePage(prim Primitive) {
 					}
 				</table>
 			</div>
+			if prim.Notes != "" {
+				<div class="prose prose-sm max-w-none text-gray-700">
+					@templ.Raw(prim.Notes)
+				</div>
+			}
 		</article>
 	}
 }
