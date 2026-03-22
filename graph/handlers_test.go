@@ -162,6 +162,22 @@ func TestHandlerOp(t *testing.T) {
 		}
 	})
 
+	t.Run("report_json", func(t *testing.T) {
+		parent, _ := store.CreateNode(t.Context(), CreateNodeParams{
+			SpaceID: space.ID, Kind: KindPost, Title: "Flaggable", Author: "Tester", AuthorID: "test-user-1",
+		})
+		body := `{"op":"report","node_id":"` + parent.ID + `","reason":"inappropriate content"}`
+		req := httptest.NewRequest("POST", "/app/handler-op-test/op", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json")
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+		}
+	})
+
 	t.Run("unknown_op", func(t *testing.T) {
 		body := `{"op":"nonexistent"}`
 		req := httptest.NewRequest("POST", "/app/handler-op-test/op", strings.NewReader(body))
