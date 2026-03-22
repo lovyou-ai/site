@@ -223,6 +223,8 @@ CREATE TABLE IF NOT EXISTS mind_state (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- users table is created by auth.Auth.migrate(). Graph queries JOIN on it.
+-- Creating here too (IF NOT EXISTS) ensures tests work without auth setup.
 CREATE TABLE IF NOT EXISTS users (
     id         TEXT PRIMARY KEY,
     google_id  TEXT UNIQUE NOT NULL,
