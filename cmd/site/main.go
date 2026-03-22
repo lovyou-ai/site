@@ -262,6 +262,42 @@ func main() {
 		views.DiscoverPage(ds).Render(r.Context(), w)
 	})
 
+	// User profiles — identity from action history (Layer 8).
+	mux.HandleFunc("GET /user/{name}", func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("name")
+		if graphStore == nil {
+			http.NotFound(w, r)
+			return
+		}
+		u, err := graphStore.GetUserProfile(r.Context(), name)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		// Get recent public activity for this user.
+		ops, _ := graphStore.ListPublicActivity(r.Context(), 50)
+		var recentOps []views.ActivityItem
+		for _, o := range ops {
+			if o.ActorID != u.ID {
+				continue
+			}
+			spaceName, spaceSlug := "", ""
+			if sp, _ := graphStore.GetSpaceByID(r.Context(), o.SpaceID); sp != nil {
+				spaceName = sp.Name
+				spaceSlug = sp.Slug
+			}
+			recentOps = append(recentOps, views.ActivityItem{
+				Actor: o.Actor, ActorKind: o.ActorKind, Op: o.Op,
+				SpaceName: spaceName, SpaceSlug: spaceSlug, CreatedAt: o.CreatedAt,
+			})
+		}
+		views.ProfilePage(views.UserProfile{
+			Name: u.Name, Kind: u.Kind,
+			TasksDone: u.TasksDone, OpCount: u.OpCount,
+			RecentOps: recentOps,
+		}).Render(r.Context(), w)
+	})
+
 	// Global activity — transparent audit trail (Layer 7).
 	mux.HandleFunc("GET /activity", func(w http.ResponseWriter, r *http.Request) {
 		if graphStore == nil {

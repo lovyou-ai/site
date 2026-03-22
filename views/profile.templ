@@ -1,0 +1,50 @@
+package views
+
+import "fmt"
+
+// UserProfile holds data for the public profile page.
+type UserProfile struct {
+	Name      string
+	Kind      string // "human" or "agent"
+	TasksDone int
+	OpCount   int
+	RecentOps []ActivityItem
+}
+
+templ ProfilePage(profile UserProfile) {
+	@Layout(profile.Name + " — lovyou.ai", profile.Name + "'s profile on lovyou.ai") {
+		<div class="space-y-8">
+			<div class="reveal flex items-center gap-4" style="--d:0">
+				if profile.Kind == "agent" {
+					<span class="w-16 h-16 rounded-full bg-violet-500/10 text-violet-400 text-2xl font-bold flex items-center justify-center">
+						{ string([]rune(profile.Name)[:1]) }
+					</span>
+				} else {
+					<span class="w-16 h-16 rounded-full bg-brand/10 text-brand text-2xl font-bold flex items-center justify-center">
+						{ string([]rune(profile.Name)[:1]) }
+					</span>
+				}
+				<div>
+					<h1 class="text-2xl font-light text-warm">{ profile.Name }</h1>
+					<div class="flex items-center gap-3 mt-1">
+						if profile.Kind == "agent" {
+							<span class="text-xs font-medium px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-400">agent</span>
+						}
+						<span class="text-sm text-warm-muted">{ fmt.Sprintf("%d tasks completed", profile.TasksDone) }</span>
+						<span class="text-sm text-warm-faint">{ fmt.Sprintf("%d actions", profile.OpCount) }</span>
+					</div>
+				</div>
+			</div>
+			if len(profile.RecentOps) > 0 {
+				<div class="reveal-scroll">
+					<h2 class="text-lg font-medium text-warm mb-4">Recent activity</h2>
+					<div class="space-y-1">
+						for _, item := range profile.RecentOps {
+							@activityRow(item)
+						}
+					</div>
+				</div>
+			}
+		</div>
+	}
+}

@@ -879,6 +879,33 @@ func (s *Store) ListNodeOps(ctx context.Context, nodeID string) ([]Op, error) {
 // Helpers
 // ────────────────────────────────────────────────────────────────────
 
+// GetUserProfile returns a user by name (for public profiles).
+func (s *Store) GetUserProfile(ctx context.Context, name string) (*struct {
+	ID        string
+	Name      string
+	Kind      string
+	TasksDone int
+	OpCount   int
+}, error) {
+	var u struct {
+		ID        string
+		Name      string
+		Kind      string
+		TasksDone int
+		OpCount   int
+	}
+	err := s.db.QueryRowContext(ctx, `
+		SELECT u.id, u.name, u.kind,
+		       COALESCE((SELECT COUNT(*) FROM nodes n WHERE n.author_id = u.id AND n.kind = 'task' AND n.state = 'done'), 0),
+		       COALESCE((SELECT COUNT(*) FROM ops o WHERE o.actor_id = u.id), 0)
+		FROM users u WHERE u.name = $1`, name,
+	).Scan(&u.ID, &u.Name, &u.Kind, &u.TasksDone, &u.OpCount)
+	if err != nil {
+		return nil, err
+	}
+	return &u, nil
+}
+
 // ListPublicActivity returns recent ops from public spaces.
 func (s *Store) ListPublicActivity(ctx context.Context, limit int) ([]Op, error) {
 	if limit <= 0 {
