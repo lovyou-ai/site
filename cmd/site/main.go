@@ -236,6 +236,8 @@ func main() {
 				CreatedAt:    sp.CreatedAt,
 				NodeCount:    sp.NodeCount,
 				LastActivity: sp.LastActivity,
+				MemberCount:  sp.MemberCount,
+				HasAgent:     sp.HasAgent,
 			}
 		}
 		views.DiscoverPage(ds).Render(r.Context(), w)

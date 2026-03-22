@@ -271,18 +271,29 @@ type SpaceWithStats struct {
 	Space
 	NodeCount    int        `json:"node_count"`
 	LastActivity *time.Time `json:"last_activity,omitempty"`
+	MemberCount  int        `json:"member_count"`
+	HasAgent     bool       `json:"has_agent"`
 }
 
-// ListPublicSpaces returns all public spaces with node counts and last activity.
+// ListPublicSpaces returns all public spaces with node counts, last activity,
+// member count, and agent presence.
 func (s *Store) ListPublicSpaces(ctx context.Context) ([]SpaceWithStats, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT s.id, s.slug, s.name, s.description, s.owner_id, s.kind, s.visibility, s.created_at,
-		        COALESCE(n.cnt, 0), n.last_at
+		        COALESCE(n.cnt, 0), n.last_at,
+		        COALESCE(m.member_count, 0), COALESCE(m.has_agent, false)
 		 FROM spaces s
 		 LEFT JOIN LATERAL (
 		     SELECT COUNT(*) AS cnt, MAX(created_at) AS last_at
 		     FROM nodes WHERE space_id = s.id
 		 ) n ON true
+		 LEFT JOIN LATERAL (
+		     SELECT COUNT(DISTINCT o.actor) AS member_count,
+		            BOOL_OR(u.kind = 'agent') AS has_agent
+		     FROM ops o
+		     LEFT JOIN users u ON u.name = o.actor
+		     WHERE o.space_id = s.id
+		 ) m ON true
 		 WHERE s.visibility = 'public'
 		 ORDER BY COALESCE(n.last_at, s.created_at) DESC`)
 	if err != nil {
@@ -294,7 +305,8 @@ func (s *Store) ListPublicSpaces(ctx context.Context) ([]SpaceWithStats, error) 
 	for rows.Next() {
 		var sp SpaceWithStats
 		var lastAt sql.NullTime
-		if err := rows.Scan(&sp.ID, &sp.Slug, &sp.Name, &sp.Description, &sp.OwnerID, &sp.Kind, &sp.Visibility, &sp.CreatedAt, &sp.NodeCount, &lastAt); err != nil {
+		if err := rows.Scan(&sp.ID, &sp.Slug, &sp.Name, &sp.Description, &sp.OwnerID, &sp.Kind, &sp.Visibility, &sp.CreatedAt,
+			&sp.NodeCount, &lastAt, &sp.MemberCount, &sp.HasAgent); err != nil {
 			return nil, fmt.Errorf("scan space: %w", err)
 		}
 		if lastAt.Valid {
