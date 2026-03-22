@@ -480,12 +480,26 @@ templ TaskCard(node Node, spaceSlug string) {
 
 // ── Feed view ───────────────────────────────────────────────────
 
-templ FeedView(space Space, spaces []Space, posts []Node, user ViewUser, isOwner bool) {
+templ FeedView(space Space, spaces []Space, posts []Node, user ViewUser, isOwner bool, hasAgent bool) {
 	@appLayout(space, spaces, "feed", user) {
 		<div class="max-w-2xl mx-auto p-6 space-y-6">
 			<div class="flex items-center justify-between">
 				<h1 class="text-xl font-medium text-warm">Feed</h1>
 			</div>
+			if hasAgent && user.Name != "" && user.Name != "Anonymous" {
+				<a href={ templ.SafeURL("/app/" + space.Slug + "/conversations") }
+					class="block p-4 bg-violet-500/5 border border-violet-500/20 rounded-lg hover:bg-violet-500/10 transition-colors">
+					<div class="flex items-center gap-3">
+						<span class="w-8 h-8 rounded-full bg-violet-500/10 text-violet-400 text-sm font-bold flex items-center justify-center flex-shrink-0">
+							<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"></circle></svg>
+						</span>
+						<div>
+							<p class="text-sm font-medium text-violet-300">Chat with an AI agent</p>
+							<p class="text-xs text-warm-faint">Start a conversation — the Mind responds in real time</p>
+						</div>
+					</div>
+				</a>
+			}
 			if user.Name != "" && user.Name != "Anonymous" {
 				<!-- New post form -->
 				<form

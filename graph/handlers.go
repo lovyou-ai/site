@@ -441,7 +441,8 @@ func (h *Handlers) handleFeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	FeedView(*space, spaces, posts, h.viewUser(r), isOwner).Render(r.Context(), w)
+	agents, _ := h.store.ListAgentNames(r.Context())
+	FeedView(*space, spaces, posts, h.viewUser(r), isOwner, len(agents) > 0).Render(r.Context(), w)
 }
 
 func (h *Handlers) handleThreads(w http.ResponseWriter, r *http.Request) {
