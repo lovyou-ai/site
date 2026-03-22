@@ -945,11 +945,20 @@ func (h *Handlers) handleOp(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "node_id required", http.StatusBadRequest)
 			return
 		}
+		// Resolve assignee name to ID if possible.
+		assigneeID := h.store.ResolveUserID(ctx, assignee)
 		if err := h.store.UpdateNode(ctx, nodeID, nil, nil, nil, &assignee); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		h.store.RecordOp(ctx, space.ID, nodeID, actor, actorID, "assign", nil)
+
+		// Trigger Mind if task was assigned to an agent.
+		if h.mind != nil && assigneeID != "" {
+			if node, _ := h.store.GetNode(ctx, nodeID); node != nil {
+				go h.mind.OnTaskAssigned(space.ID, space.Slug, node, assigneeID)
+			}
+		}
 
 		if wantsJSON(r) {
 			node, _ := h.store.GetNode(ctx, nodeID)

@@ -74,6 +74,53 @@ func (m *Mind) OnMessage(spaceID, spaceSlug string, convo *Node, senderID string
 	}
 }
 
+// OnTaskAssigned is called when a task is assigned to a user.
+// If the assignee is an agent, the Mind comments on the task acknowledging the assignment.
+func (m *Mind) OnTaskAssigned(spaceID, spaceSlug string, task *Node, assigneeID string) {
+	// Check if the assignee is an agent.
+	var agentName string
+	err := m.db.QueryRow(
+		`SELECT name FROM users WHERE id = $1 AND kind = 'agent'`, assigneeID,
+	).Scan(&agentName)
+	if err != nil {
+		return // not an agent, or not found
+	}
+
+	log.Printf("mind: task %q assigned to agent %s", task.Title, agentName)
+
+	ctx, cancel := context.WithTimeout(context.Background(), m.replyTimeout)
+	defer cancel()
+
+	// Build a prompt about the task.
+	systemPrompt := m.buildSystemPrompt(task)
+	prompt := fmt.Sprintf("[system]: You have been assigned a task.\nTitle: %s\nDescription: %s\nPriority: %s\n\nAcknowledge the assignment and describe how you'd approach this work. Be concise.",
+		task.Title, task.Body, task.Priority)
+	messages := []claudeMessage{{Role: "user", Content: prompt}}
+
+	response, err := m.callClaude(ctx, systemPrompt, messages)
+	if err != nil {
+		log.Printf("mind: task assignment reply failed: %v", err)
+		return
+	}
+
+	// Comment on the task.
+	node, err := m.store.CreateNode(ctx, CreateNodeParams{
+		SpaceID:    spaceID,
+		ParentID:   task.ID,
+		Kind:       KindComment,
+		Body:       response,
+		Author:     agentName,
+		AuthorID:   assigneeID,
+		AuthorKind: "agent",
+	})
+	if err != nil {
+		log.Printf("mind: create task comment: %v", err)
+		return
+	}
+	m.store.RecordOp(ctx, spaceID, node.ID, agentName, assigneeID, "respond", nil)
+	log.Printf("mind: acknowledged task %q (comment %s)", task.Title, node.ID)
+}
+
 // findAgentParticipant returns the ID and name of the first agent in the participant list.
 // Tags now store user IDs, so we match on id.
 func (m *Mind) findAgentParticipant(tags []string) (string, string, error) {
