@@ -1048,7 +1048,7 @@ func (h *Handlers) handleOp(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusCreated, map[string]any{"node": node, "op": "converse"})
 			return
 		}
-		http.Redirect(w, r, fmt.Sprintf("/app/%s/node/%s", space.Slug, node.ID), http.StatusSeeOther)
+		http.Redirect(w, r, fmt.Sprintf("/app/%s/conversation/%s", space.Slug, node.ID), http.StatusSeeOther)
 
 	default:
 		http.Error(w, fmt.Sprintf("unknown op: %s", op), http.StatusBadRequest)
