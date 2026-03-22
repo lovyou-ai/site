@@ -39,10 +39,11 @@ const (
 
 // Node kinds.
 const (
-	KindTask    = "task"
-	KindPost    = "post"
-	KindThread  = "thread"
-	KindComment = "comment"
+	KindTask         = "task"
+	KindPost         = "post"
+	KindThread       = "thread"
+	KindComment      = "comment"
+	KindConversation = "conversation"
 )
 
 // Space kinds.
@@ -502,6 +503,44 @@ func (s *Store) ListNodes(ctx context.Context, p ListNodesParams) ([]Node, error
 		if dueDate.Valid {
 			d := dueDate.Time
 			n.DueDate = &d
+		}
+		nodes = append(nodes, n)
+	}
+	return nodes, rows.Err()
+}
+
+// ListConversations returns conversations in a space that involve the given user.
+func (s *Store) ListConversations(ctx context.Context, spaceID, userName string) ([]Node, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT n.id, n.space_id, n.parent_id, n.kind, n.title, n.body,
+		       n.state, n.priority, n.assignee, n.author, n.author_kind, n.tags, n.due_date,
+		       n.created_at, n.updated_at,
+		       COALESCE((SELECT COUNT(*) FROM nodes c WHERE c.parent_id = n.id), 0),
+		       0, 0
+		FROM nodes n
+		WHERE n.space_id = $1 AND n.kind = 'conversation'
+		  AND ($2 = ANY(n.tags) OR n.author = $2)
+		ORDER BY n.updated_at DESC`, spaceID, userName)
+	if err != nil {
+		return nil, fmt.Errorf("list conversations: %w", err)
+	}
+	defer rows.Close()
+
+	var nodes []Node
+	for rows.Next() {
+		var n Node
+		var parentID sql.NullString
+		var dueDate sql.NullTime
+		if err := rows.Scan(
+			&n.ID, &n.SpaceID, &parentID, &n.Kind, &n.Title, &n.Body,
+			&n.State, &n.Priority, &n.Assignee, &n.Author, &n.AuthorKind, pq.Array(&n.Tags), &dueDate,
+			&n.CreatedAt, &n.UpdatedAt,
+			&n.ChildCount, &n.ChildDone, &n.BlockerCount,
+		); err != nil {
+			return nil, fmt.Errorf("scan conversation: %w", err)
+		}
+		if parentID.Valid {
+			n.ParentID = parentID.String
 		}
 		nodes = append(nodes, n)
 	}

@@ -63,6 +63,7 @@ func (h *Handlers) Register(mux *http.ServeMux) {
 	mux.Handle("GET /app/{slug}/board", h.readWrap(h.handleBoard))
 	mux.Handle("GET /app/{slug}/feed", h.readWrap(h.handleFeed))
 	mux.Handle("GET /app/{slug}/threads", h.readWrap(h.handleThreads))
+	mux.Handle("GET /app/{slug}/conversations", h.readWrap(h.handleConversations))
 	mux.Handle("GET /app/{slug}/people", h.readWrap(h.handlePeople))
 	mux.Handle("GET /app/{slug}/activity", h.readWrap(h.handleActivity))
 
@@ -462,6 +463,34 @@ func (h *Handlers) handleThreads(w http.ResponseWriter, r *http.Request) {
 	ThreadsView(*space, spaces, threads, h.viewUser(r), isOwner).Render(r.Context(), w)
 }
 
+func (h *Handlers) handleConversations(w http.ResponseWriter, r *http.Request) {
+	space, _, err := h.spaceForRead(r)
+	if errors.Is(err, ErrNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	spaces, _ := h.store.ListSpaces(r.Context(), h.userID(r))
+	actor := h.userName(r)
+
+	convos, err := h.store.ListConversations(r.Context(), space.ID, actor)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if wantsJSON(r) {
+		writeJSON(w, http.StatusOK, map[string]any{"space": space, "conversations": convos})
+		return
+	}
+
+	ConversationsView(*space, spaces, convos, h.viewUser(r)).Render(r.Context(), w)
+}
+
 func (h *Handlers) handlePeople(w http.ResponseWriter, r *http.Request) {
 	space, _, err := h.spaceForRead(r)
 	if errors.Is(err, ErrNotFound) {
@@ -835,6 +864,43 @@ func (h *Handlers) handleOp(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		http.Redirect(w, r, fmt.Sprintf("/app/%s/node/%s", space.Slug, nodeID), http.StatusSeeOther)
+
+	case "converse":
+		title := strings.TrimSpace(r.FormValue("title"))
+		if title == "" {
+			http.Error(w, "title required", http.StatusBadRequest)
+			return
+		}
+		// Participants: the actor + anyone listed in "participants" (comma-separated).
+		participants := []string{actor}
+		if p := strings.TrimSpace(r.FormValue("participants")); p != "" {
+			for _, name := range strings.Split(p, ",") {
+				name = strings.TrimSpace(name)
+				if name != "" && name != actor {
+					participants = append(participants, name)
+				}
+			}
+		}
+		node, err := h.store.CreateNode(ctx, CreateNodeParams{
+			SpaceID:    space.ID,
+			Kind:       KindConversation,
+			Title:      title,
+			Body:       strings.TrimSpace(r.FormValue("body")),
+			Author:     actor,
+			AuthorKind: actorKind,
+			Tags:       participants,
+		})
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		h.store.RecordOp(ctx, space.ID, node.ID, actor, "converse", nil)
+
+		if wantsJSON(r) {
+			writeJSON(w, http.StatusCreated, map[string]any{"node": node, "op": "converse"})
+			return
+		}
+		http.Redirect(w, r, fmt.Sprintf("/app/%s/node/%s", space.Slug, node.ID), http.StatusSeeOther)
 
 	default:
 		http.Error(w, fmt.Sprintf("unknown op: %s", op), http.StatusBadRequest)

@@ -87,6 +87,7 @@ templ appLayout(space Space, spaces []Space, activeLens string, user ViewUser) {
 					@mobileLensTab(space.Slug, "board", "Board", activeLens)
 					@mobileLensTab(space.Slug, "feed", "Feed", activeLens)
 					@mobileLensTab(space.Slug, "threads", "Threads", activeLens)
+					@mobileLensTab(space.Slug, "conversations", "Chat", activeLens)
 					@mobileLensTab(space.Slug, "people", "People", activeLens)
 					@mobileLensTab(space.Slug, "activity", "Activity", activeLens)
 					@mobileLensTab(space.Slug, "settings", "Settings", activeLens)
@@ -103,6 +104,7 @@ templ appLayout(space Space, spaces []Space, activeLens string, user ViewUser) {
 								@lensLink(space.Slug, "board", "Board", activeLens, boardIcon())
 								@lensLink(space.Slug, "feed", "Feed", activeLens, feedIcon())
 								@lensLink(space.Slug, "threads", "Threads", activeLens, threadsIcon())
+								@lensLink(space.Slug, "conversations", "Chat", activeLens, conversationsIcon())
 								@lensLink(space.Slug, "people", "People", activeLens, peopleIcon())
 								@lensLink(space.Slug, "activity", "Activity", activeLens, activityIcon())
 								@lensLink(space.Slug, "settings", "Settings", activeLens, settingsIcon())
@@ -185,6 +187,12 @@ templ feedIcon() {
 templ threadsIcon() {
 	<svg class="w-4 h-4 text-warm-faint" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 		<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+	</svg>
+}
+
+templ conversationsIcon() {
+	<svg class="w-4 h-4 text-warm-faint" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+		<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
 	</svg>
 }
 
@@ -566,6 +574,58 @@ templ ThreadsView(space Space, spaces []Space, threads []Node, user ViewUser, is
 				}
 				if len(threads) == 0 {
 					<p class="text-center text-warm-faint py-8">No threads yet. Start a discussion!</p>
+				}
+			</div>
+		</div>
+	}
+}
+
+// ── Conversations view ──────────────────────────────────────────
+
+templ ConversationsView(space Space, spaces []Space, convos []Node, user ViewUser) {
+	@appLayout(space, spaces, "conversations", user) {
+		<div class="max-w-2xl mx-auto p-6 space-y-6">
+			<div class="flex items-center justify-between">
+				<h1 class="text-xl font-medium text-warm">Conversations</h1>
+			</div>
+			if user.Name != "" && user.Name != "Anonymous" {
+				<!-- New conversation form -->
+				<form
+					action={ templ.SafeURL("/app/" + space.Slug + "/op") }
+					method="POST"
+					class="bg-surface rounded-lg border border-edge p-4 space-y-3"
+				>
+					<input type="hidden" name="op" value="converse"/>
+					<input type="text" name="title" placeholder="Conversation name" required class="w-full text-sm px-3 py-2 bg-elevated border border-edge rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent text-warm placeholder-warm-faint"/>
+					<input type="text" name="participants" placeholder="Participants (comma-separated names)" class="w-full text-sm px-3 py-2 bg-elevated border border-edge rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent text-warm placeholder-warm-faint"/>
+					<div class="flex justify-end">
+						<button type="submit" class="px-4 py-1.5 bg-brand text-void rounded-lg hover:bg-brand-dark transition-colors text-sm font-medium">Start conversation</button>
+					</div>
+				</form>
+			}
+			<div class="space-y-2">
+				for _, convo := range convos {
+					<a href={ templ.SafeURL(fmt.Sprintf("/app/%s/node/%s", space.Slug, convo.ID)) }
+						class="block bg-surface rounded-lg border border-edge p-4 hover:border-brand/40 hover:shadow transition-all">
+						<div class="flex items-center justify-between mb-1">
+							<h3 class="font-medium text-warm">{ convo.Title }</h3>
+							<span class="text-xs text-warm-faint">{ fmt.Sprintf("%d messages", convo.ChildCount) }</span>
+						</div>
+						<div class="flex items-center gap-2 text-xs text-warm-faint">
+							<div class="flex items-center gap-1">
+								for i, tag := range convo.Tags {
+									if i > 0 {
+										<span class="text-warm-faint">·</span>
+									}
+									<span class="text-warm-muted">{ tag }</span>
+								}
+							</div>
+							<span class="ml-auto">{ convo.UpdatedAt.Format("Jan 2, 3:04 PM") }</span>
+						</div>
+					</a>
+				}
+				if len(convos) == 0 {
+					<p class="text-center text-warm-faint py-8">No conversations yet. Start one above!</p>
 				}
 			</div>
 		</div>
