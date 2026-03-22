@@ -4,9 +4,9 @@
 
 ### The Gap
 
-Layer 2 models dyadic exchange — two actors communicating, negotiating, and forming agreements. But when a third actor joins, new phenomena appear that dyads can't express. What's acceptable isn't just what two people agree on — it's what the GROUP considers normal. Roles, norms, reputation within a community, inclusion, and exclusion don't exist at the dyad level.
+Layer 2 models dyadic exchange — two actors establishing terms, making offers, and forming agreements. But when a third actor joins, new phenomena appear that dyads can't express. What's acceptable isn't just what two people agree on — it's what the GROUP considers normal. Roles, norms, reputation within a community, inclusion, and exclusion don't exist at the dyad level.
 
-**Test:** Can you express "The community considers this behavior unacceptable" in Layer 2? You can have individual Breaches and bilateral Contracts, but the concept of a norm — a shared expectation held by a group, not derived from any specific agreement — has no Layer 2 representation. Norms emerge from groups, not pairs.
+**Test:** Can you express "The community considers this behavior unacceptable" in Layer 2? You can have individual Breaches and bilateral Agreements, but the concept of a norm — a shared expectation held by a group, not derived from any specific agreement — has no Layer 2 representation. Norms emerge from groups, not pairs.
 
 ### The Transition
 
@@ -21,7 +21,7 @@ What can a group DO that a dyad cannot?
 1. **Norm** — establish shared expectations not derived from bilateral agreement
 2. **Role** — assign social positions with specific expectations
 3. **Include/Exclude** — control group membership
-4. **Reputation** — establish standing within a community
+4. **Govern** — make collective decisions
 
 ### Semantic Dimensions
 
@@ -34,65 +34,66 @@ What can a group DO that a dyad cannot?
 
 ### Decomposition
 
-**Group 0 — Norms** (collective expectations)
+**Group 0 — Collective Identity** (who we are together)
+
+| Primitive | Effect | Formality | Direction | Temporality | What it does |
+|-----------|--------|-----------|-----------|-------------|--------------|
+| **Group** | Collective | Formal | Centripetal | Declared | A named collective with boundaries |
+| **Membership** | Individual | Formal | Centripetal | Declared | Joining, belonging to, and leaving a group |
+| **Role** | Individual | Formal | Centripetal | Declared | Named position with expectations |
+| **Consent** | Individual | Formal | Centripetal | Declared | Voluntary agreement to participate or be governed |
+
+Collective identity lifecycle: a group is formed (Group) → members join (Membership) → positions are assigned (Role) → and participation is voluntary (Consent). This covers how collectives constitute themselves.
+
+**Group 1 — Social Order** (how we live together)
 
 | Primitive | Effect | Formality | Direction | Temporality | What it does |
 |-----------|--------|-----------|-----------|-------------|--------------|
 | **Norm** | Collective | Formal | Centripetal | Declared | Shared behavioral expectation |
-| **Convention** | Collective | Informal | Centripetal | Emergent | Pattern that becomes expected |
-| **Taboo** | Collective | Informal | Centrifugal | Emergent | Strong negative norm — "never do this" |
-| **Sanction** | Individual | Formal | Centrifugal | Declared | Consequence for norm violation |
-
-Norm lifecycle: patterns form (Convention) → become expectations (Norm) → strong negatives crystallize (Taboo) → violations have consequences (Sanction). This is how societies regulate behavior.
-
-**Group 1 — Roles** (social positions)
-
-| Primitive | Effect | Formality | Direction | Temporality | What it does |
-|-----------|--------|-----------|-----------|-------------|--------------|
-| **Role** | Individual | Formal | Centripetal | Declared | Named position with expectations |
-| **Status** | Individual | Informal | Centripetal | Emergent | Standing within the group |
-| **Influence** | Individual | Informal | Centripetal | Emergent | Capacity to affect group decisions |
-| **Succession** | Individual | Formal | Centripetal | Declared | Transfer of role from one actor to another |
-
-Role lifecycle: roles exist (Role) → actors have standing (Status) → standing creates influence (Influence) → roles change hands (Succession).
-
-**Group 2 — Membership** (group boundary)
-
-| Primitive | Effect | Formality | Direction | Temporality | What it does |
-|-----------|--------|-----------|-----------|-------------|--------------|
-| **Inclusion** | Individual | Formal | Centripetal | Declared | Welcoming new members |
-| **Exclusion** | Individual | Formal | Centrifugal | Declared | Removing members |
 | **Reputation** | Individual | Informal | Centripetal | Emergent | Community standing from track record |
-| **Solidarity** | Collective | Informal | Centripetal | Emergent | Group cohesion and mutual support |
+| **Sanction** | Individual | Formal | Centrifugal | Declared | Consequence for norm violation |
+| **Authority** | Individual | Formal | Centripetal | Declared | Legitimate power to act on behalf of the group |
 
-Membership lifecycle: join (Inclusion) → build standing (Reputation) → group coheres (Solidarity) → or member is removed (Exclusion). Solidarity is the collective counterpart to individual Reputation.
+Social order lifecycle: expectations are established (Norm) → standing develops (Reputation) → violations have consequences (Sanction) → and some members have legitimate power (Authority). This is how societies regulate behavior.
+
+**Group 2 — Collective Agency** (what we do together)
+
+| Primitive | Effect | Formality | Direction | Temporality | What it does |
+|-----------|--------|-----------|-----------|-------------|--------------|
+| **Property** | Individual | Formal | Centrifugal | Declared | Recognised claim over resources |
+| **Commons** | Collective | Formal | Centripetal | Declared | Shared resources that belong to the group |
+| **Governance** | Collective | Formal | Centripetal | Declared | How collective decisions are made |
+| **CollectiveAct** | Collective | Formal | Centripetal | Declared | Action taken by the group as a whole |
+
+Collective agency lifecycle: individuals have recognised claims (Property) → some resources are shared (Commons) → decision-making structures exist (Governance) → and the group acts as one (CollectiveAct). This covers how groups exercise agency beyond individual action.
 
 ### Gap Analysis
 
 | Behavior | Maps to | Notes |
 |----------|---------|-------|
-| "We don't do that here" | Taboo | |
-| "Everyone reviews code before merging" | Norm or Convention | Depends on whether it was declared |
+| "This is the backend team" | Group | |
+| "Alice joined the project" | Membership | |
 | "Alice is a moderator" | Role | |
-| "Bob has high standing in the community" | Status | |
-| "Carol's opinion carries weight" | Influence | |
-| "Bob takes over as team lead" | Succession | |
-| "Welcome to the community" | Inclusion | |
-| "You're banned" | Exclusion | |
-| "Alice has completed 50 projects with high ratings" | Reputation | |
-| "This group supports its members" | Solidarity | |
+| "Everyone agreed to the code of conduct" | Consent | |
+| "We don't do that here" | Norm | |
+| "Bob has high standing in the community" | Reputation | |
 | "Violating the code of conduct results in suspension" | Sanction | |
-| Community votes on a proposal | Norm + L1.Permission + L0.Authority | Cross-layer composition |
-| Formation of a subgroup | Inclusion (subgroup) | Nested groups |
-| Online community moderation | Norm + Sanction + Exclusion | Composition |
+| "The lead has authority to approve PRs" | Authority | |
+| "This codebase belongs to the team" | Property | |
+| "The shared library is a community resource" | Commons | |
+| "Decisions are made by majority vote" | Governance | |
+| "The community voted to adopt the new policy" | CollectiveAct | |
+| Community votes on a proposal | Governance + CollectiveAct | Composition |
+| Online community moderation | Norm + Sanction + Authority | Composition |
+| Open source project governance | Group + Role + Governance + Commons | Composition |
 
 **No gaps found.**
 
 ### Completeness Argument
 
-1. **Dimensional coverage:** All meaningful combinations covered. The key distinction is formal/informal crossed with individual/collective — this generates norms (collective formal), conventions (collective informal), roles (individual formal), and status (individual informal).
+1. **Dimensional coverage:** All meaningful combinations covered. The key distinction is formal/informal crossed with individual/collective — this generates the essential structures of social life.
 
-2. **Sociological coverage:** The four pillars of social structure from sociology — norms, roles, membership, and stratification — are all represented. Stratification emerges from Status + Influence + Reputation without needing a separate primitive.
+2. **Sociological coverage:** The four pillars of social structure from sociology — norms, roles, membership, and stratification — are all represented. Collective agency (Property, Commons, Governance, CollectiveAct) captures how groups act beyond individual action.
 
 3. **Layer boundary:** None of these require concepts from Layer 4 (Legal). Society has informal norms and sanctions, but not formal adjudication, precedent, or jurisdiction. Those are Layer 4's gap.
 

@@ -4,9 +4,9 @@
 
 ### The Gap
 
-Layer 1 gives actors goals, plans, attention, and autonomy. An actor can decide, delegate, and track commitment. But all of this is unilateral — one actor acting on the world. When two actors interact, Layer 1 has delegation ("you do this for me") but no concept of reciprocity ("I'll do this IF you do that"). Offer, acceptance, obligation, and fairness don't exist.
+Layer 1 gives actors values, intents, choices, and communication. An actor can decide, act, and commit. But all of this is unilateral — one actor acting on the world. When two actors interact, Layer 1 has signals ("I'm telling you") but no concept of reciprocity ("I'll do this IF you do that"). Offer, acceptance, obligation, and fairness don't exist.
 
-**Test:** Can you express "Alice offers Bob $100 for a code review, Bob accepts, Alice is now obligated to pay" in Layer 1? Alice can set a Goal, delegate to Bob, and track Commitment. But the concepts of "offer" (conditional on acceptance), "acceptance" (binding bilateral agreement), and "obligation" (created by the agreement, not by delegation) have no Layer 1 representation. Delegation is unilateral; exchange is bilateral.
+**Test:** Can you express "Alice offers Bob $100 for a code review, Bob accepts, Alice is now obligated to pay" in Layer 1? Alice can set an Intent, act, and commit. But the concepts of "offer" (conditional on acceptance), "acceptance" (binding bilateral agreement), and "obligation" (created by the agreement, not by unilateral commitment) have no Layer 1 representation. Commitment is unilateral; exchange is bilateral.
 
 ### The Transition
 
@@ -18,10 +18,10 @@ A single actor becomes two actors in relation. The fundamental new capacity: ope
 
 What can a dyad DO that an individual cannot?
 
-1. **Communicate** — send structured information to a specific recipient
+1. **Establish terms** — define shared language and protocols for interaction
 2. **Propose** — make a conditional offer
 3. **Agree** — create mutual binding state
-4. **Owe** — create asymmetric obligation from agreement
+4. **Exchange** — transfer value between parties
 
 ### Semantic Dimensions
 
@@ -34,58 +34,58 @@ What can a dyad DO that an individual cannot?
 
 ### Decomposition
 
-**Group 0 — Communication** (informational, symmetric)
+**Group 0 — Common Ground** (establishing shared basis for exchange)
 
 | Primitive | Symmetry | Binding | Completeness | Valence | What it does |
 |-----------|----------|---------|-------------|---------|--------------|
-| **Message** | Asymmetric | Informational | Partial | Neutral | Send structured information |
-| **Acknowledgement** | Asymmetric | Informational | Complete | Neutral | Confirm receipt and understanding |
-| **Clarification** | Symmetric | Informational | Partial | Neutral | Resolve ambiguity |
-| **Context** | Symmetric | Informational | Partial | Neutral | Maintain shared conversational state |
+| **Term** | Symmetric | Informational | Partial | Neutral | Defines shared vocabulary and meaning |
+| **Protocol** | Symmetric | Informational | Partial | Neutral | Establishes rules of interaction |
+| **Offer** | Asymmetric | Conditional | Partial | Positive | Proposes something to another |
+| **Acceptance** | Asymmetric | Binding | Complete | Positive | Accepts or rejects a proposal |
 
-Communication is the substrate of exchange. You can't negotiate if you can't talk. These four primitives cover: send → confirm → clarify → accumulate understanding.
+Common ground lifecycle: shared language is established (Term) → rules of interaction are set (Protocol) → proposals are made (Offer) → and accepted or rejected (Acceptance). You can't negotiate if you don't share terms.
 
-**Group 1 — Reciprocity** (conditional → binding)
-
-| Primitive | Symmetry | Binding | Completeness | Valence | What it does |
-|-----------|----------|---------|-------------|---------|--------------|
-| **Offer** | Asymmetric | Conditional | Partial | Positive | Propose something to another |
-| **Acceptance** | Asymmetric | Binding | Complete | Positive | Accept or reject a proposal |
-| **Obligation** | Asymmetric | Binding | Partial | Negative | Track what actors owe each other |
-| **Gratitude** | Asymmetric | Informational | Complete | Positive | Recognise fulfilment beyond expectation |
-
-Reciprocity lifecycle: propose → accept/reject → owe → fulfil → gratitude. Gratitude closes the loop by recognising extraordinary fulfilment, strengthening the relationship edge.
-
-**Group 2 — Agreement** (bilateral, binding)
+**Group 1 — Mutual Binding** (creating and tracking obligations)
 
 | Primitive | Symmetry | Binding | Completeness | Valence | What it does |
 |-----------|----------|---------|-------------|---------|--------------|
-| **Negotiation** | Symmetric | Conditional | Partial | Neutral | Iterative proposal refinement |
-| **Contract** | Symmetric | Binding | Complete | Positive | Formalised mutual commitment |
-| **Breach** | Asymmetric | Binding | Partial | Negative | Detect when obligations are violated |
-| **Resolution** | Symmetric | Binding | Complete | Neutral | Resolve disputes about agreements |
+| **Agreement** | Symmetric | Binding | Complete | Positive | Formalised mutual commitment |
+| **Obligation** | Asymmetric | Binding | Partial | Negative | Tracks what actors owe each other |
+| **Fulfillment** | Asymmetric | Binding | Complete | Positive | Satisfying an obligation |
+| **Breach** | Asymmetric | Binding | Partial | Negative | Detecting when obligations are violated |
 
-Agreement lifecycle: negotiate → contract → (breach? → resolution) or fulfilment. These primitives handle the formal side of exchange.
+Mutual binding lifecycle: parties reach agreement (Agreement) → obligations are created (Obligation) → obligations are satisfied (Fulfillment) → or violated (Breach). These primitives handle the formal side of exchange.
+
+**Group 2 — Value Transfer** (the flow of value)
+
+| Primitive | Symmetry | Binding | Completeness | Valence | What it does |
+|-----------|----------|---------|-------------|---------|--------------|
+| **Exchange** | Symmetric | Binding | Complete | Positive | Transfer of value between parties |
+| **Accountability** | Asymmetric | Informational | Partial | Neutral | Tracing responsibility for exchange outcomes |
+| **Debt** | Asymmetric | Binding | Partial | Negative | Outstanding obligation not yet fulfilled |
+| **Reciprocity** | Symmetric | Informational | Complete | Positive | Balance of give and take over time |
+
+Value transfer lifecycle: value is exchanged (Exchange) → responsibility is traced (Accountability) → outstanding obligations are tracked (Debt) → and balance is assessed over time (Reciprocity). Reciprocity closes the loop by recognising whether exchanges have been fair.
 
 ### Gap Analysis
 
 | Behavior | Maps to | Notes |
 |----------|---------|-------|
-| Alice messages Bob | Message | |
-| Bob confirms he received Alice's message | Acknowledgement | |
-| Bob asks "what did you mean by X?" | Clarification | |
+| Alice and Bob agree on what "done" means | Term | |
+| They establish a review process | Protocol | |
 | Alice offers to sell her car for $5000 | Offer | |
 | Bob says "I'll take it" | Acceptance | |
+| They shake hands on the deal | Agreement | |
 | Alice owes Bob the car; Bob owes Alice $5000 | Obligation (two instances) | |
-| Bob says "thanks, car runs great" | Gratitude | |
-| Alice and Bob haggle on price | Negotiation | |
-| They sign a purchase agreement | Contract | |
+| Bob pays Alice $5000 | Fulfillment | |
 | Bob doesn't pay | Breach | |
-| They go through dispute resolution | Resolution | |
-| Shared understanding of conversation | Context | |
-| Bartering goods | Offer + Acceptance + Obligation | Composition |
-| Escrow | Obligation + Contract + Delegation (from L1) | Cross-layer composition |
-| Reputation from exchange | trust.updated (from L0) via Gratitude | L0 primitives |
+| The car changes hands for the money | Exchange | |
+| Who's responsible for the outcome? | Accountability | |
+| Bob still owes $2000 from last time | Debt | |
+| Over time, they've traded fairly | Reciprocity | |
+| Bartering goods | Offer + Acceptance + Exchange | Composition |
+| Escrow | Obligation + Agreement + L1.Commitment | Cross-layer composition |
+| Reputation from exchange | trust.updated (from L0) via Reciprocity | L0 primitives |
 
 **No gaps found.** Escrow and complex financial instruments are compositions, not missing primitives.
 
@@ -93,7 +93,7 @@ Agreement lifecycle: negotiate → contract → (breach? → resolution) or fulf
 
 1. **Dimensional coverage:** The {symmetry, binding, completeness, valence} space is covered. Degenerate combinations (e.g., symmetric + binding + complete + negative = mutual breach, which is just two Breach events) don't require new primitives.
 
-2. **Lifecycle coverage:** Communication: send → confirm → clarify → context. Reciprocity: offer → accept → obligate → gratitude. Agreement: negotiate → contract → breach/resolution. All three lifecycles are complete.
+2. **Lifecycle coverage:** Common ground: define terms → set protocol → offer → accept. Mutual binding: agree → obligate → fulfil or breach. Value transfer: exchange → account → track debt → assess reciprocity. All three lifecycles are complete.
 
 3. **Layer boundary:** None of these primitives require concepts from Layer 3 (Society). Exchange is about dyads — two actors. Group norms, roles, and collective decision-making are Layer 3's gap.
 

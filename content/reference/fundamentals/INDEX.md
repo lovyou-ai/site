@@ -2,7 +2,7 @@
 
 ## Summary
 
-Starting from 44 given primitives (Layer 0), the framework derived 156 additional primitives across 13 emergent layers, for a total of **200 primitives across 14 layers**.
+Starting from 45 given primitives (Layer 0), the framework derived 156 additional primitives across 13 emergent layers, for a total of **201 primitives across 14 layers**.
 
 Each layer emerged from gaps in the one below it. The framework is circular: Layer 13 is presupposed by Layer 0.
 
@@ -10,7 +10,7 @@ Each layer emerged from gaps in the one below it. The framework is circular: Lay
 
 | Layer | Name | Map Label | Primitives | Core Transition |
 |-------|------|-----------|------------|-----------------|
-| **0** | Foundation | *(given)* | 44 (11 groups) | The physics — observation, memory, causality, identity, trust, confidence |
+| **0** | Foundation | *(given)* | 45 (11 groups) | The physics — observation, memory, causality, identity, trust, confidence |
 | **1** | Agency | Business | 12 (3 groups) | Observer → Participant |
 | **2** | Exchange | Market | 12 (3 groups) | Individual → Dyad |
 | **3** | Society | Society | 12 (3 groups) | Dyad → Group |
@@ -27,7 +27,7 @@ Each layer emerged from gaps in the one below it. The framework is circular: Lay
 
 ## All Primitives
 
-### Layer 0 — Foundation (44 primitives, given)
+### Layer 0 — Foundation (45 primitives, given)
 **Group 0 — Foundation:** Event, EventStore, Clock, Hash, Self
 **Group 1 — Causality:** CausalLink, Ancestry, Descendancy, FirstCause
 **Group 2 — Identity:** ActorID, ActorRegistry, Signature, Verify

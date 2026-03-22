@@ -1,6 +1,6 @@
 # Layer 0 — Foundation
 
-## Status: Given (44 primitives, 11 groups)
+## Status: Given (45 primitives, 11 groups)
 
 Layer 0 is not derived. It is the physics — the substrate. These observations are from the first examination.
 

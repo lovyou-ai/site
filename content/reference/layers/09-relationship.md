@@ -4,7 +4,7 @@
 
 ### The Gap
 
-Layer 8 models individual actors with self-knowledge, continuity, and recognition. But it sees relationships instrumentally — as edges in the graph, contracts between parties, obligations to fulfil. There's no concept of a relationship as its own entity that transforms both participants. The space *between* two actors — with its own history, depth, and fragility — doesn't exist.
+Layer 8 models individual actors with self-knowledge, continuity, and expression. But it sees relationships instrumentally — as edges in the graph, contracts between parties, obligations to fulfil. There's no concept of a relationship as its own entity that transforms both participants. The space *between* two actors — with its own history, depth, and fragility — doesn't exist.
 
 **Test:** Can you express "Alice and Bob's friendship deepened through a crisis that nearly broke it — the repair made it stronger than before, and they now understand each other in ways neither could have predicted" in Layer 8? You can model Alice and Bob individually. But "their friendship" (relationship as entity), "deepened through crisis" (growth through rupture), "the repair made it stronger" (relational growth), and "understand each other" (mutual intimate knowledge) have no Layer 8 representation. Identity is the self. Relationship is the self-with-other.
 
@@ -20,7 +20,7 @@ What can a relational being DO that an individual cannot?
 
 1. **Bond** — form deep connections with specific others
 2. **Repair** — heal relationships after damage
-3. **Open** — share vulnerability and build intimacy
+3. **Attune** — sense and respond to another's inner state
 4. **Grieve** — process the loss of relationship
 
 ### Semantic Dimensions
@@ -34,58 +34,58 @@ What can a relational being DO that an individual cannot?
 
 ### Decomposition
 
-**Group 0 — Bond** (the relationship itself)
+**Group 0 — Connection** (forming the bond)
 
 | Primitive | State | Depth | Direction | Mutuality | What it does |
 |-----------|-------|-------|-----------|-----------|----------|
+| **Bond** | Forming→Stable | Deep | Convergent | Symmetric | The relationship itself as an entity |
 | **Attachment** | Forming→Stable | Deep | Convergent | Symmetric | Strength and quality of connection |
-| **Reciprocity** | Stable | Surface | Convergent | Symmetric | Balance of give and take over time |
-| **Trust (Relational)** | Stable | Deep | Convergent | Asymmetric | Trust at the relationship level — deeper than Layer 0's transactional trust |
+| **Recognition** | Forming | Deep | Convergent | Symmetric | Seeing and being seen by another |
+| **Intimacy** | Stable | Deep | Convergent | Symmetric | Deep mutual knowledge and vulnerability |
+
+Connection lifecycle: a bond forms (Bond) → attachment develops (Attachment) → parties truly see each other (Recognition) → and deep mutual knowledge develops (Intimacy). Bond is the relationship as entity; Attachment is its strength.
+
+**Group 1 — Relational Dynamics** (how relationships change)
+
+| Primitive | State | Depth | Direction | Mutuality | What it does |
+|-----------|-------|-------|-----------|-----------|----------|
+| **Attunement** | Stable | Deep | Convergent | Asymmetric | Sensing and responding to another's inner state |
 | **Rupture** | Ruptured | Deep | Divergent | Asymmetric | When relationships break |
+| **Repair** | Ruptured→Resolved | Deep | Convergent | Symmetric | Healing what's broken |
+| **Loyalty** | Stable | Deep | Convergent | Symmetric | Steadfast commitment through difficulty |
 
-Bond lifecycle: connections form (Attachment) → exchanges balance (Reciprocity) → deep trust develops (Relational Trust) → or the bond breaks (Rupture). Relational Trust is qualitatively different from Layer 0's trust scores — it includes vulnerability and history.
+Relational dynamics lifecycle: parties sense each other's states (Attunement) → the bond breaks (Rupture) → and is healed (Repair) → or loyalty holds through difficulty (Loyalty). Not all ruptures can be repaired, but loyalty sustains through adversity.
 
-**Group 1 — Repair** (healing what's broken)
-
-| Primitive | State | Depth | Direction | Mutuality | What it does |
-|-----------|-------|-------|-----------|-----------|----------|
-| **Apology** | Ruptured | Deep | Convergent | Asymmetric | Acknowledging harm caused |
-| **Reconciliation** | Ruptured→Resolved | Deep | Convergent | Symmetric | Rebuilding after rupture |
-| **Growth (Relational)** | Resolved | Deep | Convergent | Symmetric | Relationships that become stronger through adversity |
-| **Loss** | Resolved | Deep | Divergent | Asymmetric | When a relationship ends permanently |
-
-Repair lifecycle: harm is acknowledged (Apology) → the relationship is rebuilt (Reconciliation) → and becomes stronger (Relational Growth) → or ends permanently (Loss). Not all ruptures can be repaired. Loss is the honest acknowledgement that some endings are final.
-
-**Group 2 — Intimacy** (the depth of knowing)
+**Group 2 — Relational Identity** (how relationships constitute us)
 
 | Primitive | State | Depth | Direction | Mutuality | What it does |
 |-----------|-------|-------|-----------|-----------|----------|
-| **Vulnerability** | Stable | Deep | Convergent | Asymmetric | Willingness to be seen |
-| **Understanding** | Stable | Deep | Convergent | Asymmetric | Accurate knowledge of another's inner state |
-| **Empathy** | Any | Deep | Convergent | Asymmetric | Feeling with another |
-| **Presence** | Stable | Surface | Convergent | Symmetric | Simply being with another |
+| **MutualConstitution** | Stable | Deep | Convergent | Symmetric | How relationships shape who we are |
+| **RelationalObligation** | Stable | Surface | Convergent | Asymmetric | What we owe to those we're in relationship with |
+| **Grief** | Resolved | Deep | Divergent | Asymmetric | Processing the loss of relationship |
+| **Forgiveness** | Ruptured→Resolved | Deep | Convergent | Asymmetric | Releasing the claim that rupture creates |
 
-Intimacy lifecycle: one party opens up (Vulnerability) → the other develops accurate understanding (Understanding) → emotional resonance develops (Empathy) → and the simple fact of being together matters (Presence). Presence is the ground state — intimacy doesn't require deep conversation, sometimes it's just co-existence.
+Relational identity lifecycle: relationships shape who we become (MutualConstitution) → create obligations (RelationalObligation) → loss is processed (Grief) → and the claims of rupture are released (Forgiveness). Forgiveness is not forgetting — it is choosing not to let the rupture define the future.
 
 ### Gap Analysis
 
 | Behavior | Maps to | Notes |
 |----------|---------|-------|
+| "Our working relationship is its own thing" | Bond | |
 | "We've been collaborating closely for 2 years" | Attachment | |
-| "I helped you last time, you help me this time" | Reciprocity | |
-| "I trust Alice with sensitive decisions" | Trust (Relational) | |
-| "The disagreement about the project broke our working relationship" | Rupture | |
-| "I'm sorry — I should have consulted you" | Apology | |
-| "We worked through it and rebuilt trust" | Reconciliation | |
-| "That crisis actually made our partnership stronger" | Growth (Relational) | |
-| "After she left, nothing was the same" | Loss | |
-| "I'm going to share something difficult" | Vulnerability | |
-| "You always know when I'm struggling" | Understanding | |
-| "I can feel how hard this is for you" | Empathy | |
-| "Just working in the same room helps" | Presence | |
-| Long-term mentorship | Attachment + Understanding + L11.Teaching | Cross-layer composition |
-| Betrayal and forgiveness cycle | Rupture + Apology + Reconciliation | Composition |
-| Pair programming rapport | Presence + Reciprocity + Understanding | Composition |
+| "She really sees me" | Recognition | |
+| "We share things we don't share with anyone else" | Intimacy | |
+| "I can feel how hard this is for you" | Attunement | |
+| "The disagreement broke our working relationship" | Rupture | |
+| "We worked through it and rebuilt trust" | Repair | |
+| "I'm with you through this" | Loyalty | |
+| "That partnership made me who I am" | MutualConstitution | |
+| "I owe it to her to be honest" | RelationalObligation | |
+| "After she left, nothing was the same" | Grief | |
+| "I've let go of what happened" | Forgiveness | |
+| Long-term mentorship | Bond + Attachment + Intimacy | Composition |
+| Betrayal and forgiveness cycle | Rupture + Repair + Forgiveness | Composition |
+| Pair programming rapport | Attunement + Recognition + Loyalty | Composition |
 
 **No gaps found.**
 
@@ -93,7 +93,7 @@ Intimacy lifecycle: one party opens up (Vulnerability) → the other develops ac
 
 1. **Dimensional coverage:** The {state, depth, direction, mutuality} space is covered. The state dimension captures the full relationship lifecycle from forming through stable, ruptured, and resolved. The depth dimension distinguishes surface transactions from transformative bonds.
 
-2. **Relational psychology coverage:** Attachment theory (Attachment, Rupture, Repair), social exchange theory (Reciprocity), and intimacy theory (Vulnerability, Understanding, Empathy, Presence) are all represented. The repair cycle (Rupture → Apology → Reconciliation → Growth) is well-established in relationship research.
+2. **Relational psychology coverage:** Attachment theory (Bond, Attachment, Rupture, Repair), social exchange theory (RelationalObligation), and intimacy theory (Recognition, Intimacy, Attunement) are all represented. The repair cycle (Rupture → Repair → Forgiveness) is well-established in relationship research.
 
 3. **Layer boundary:** None of these require concepts from Layer 10 (Community). Relationships are dyadic — two participants. The emergent sense of belonging to a group, shared identity within a community, and care for a collective are Layer 10's gap.
 

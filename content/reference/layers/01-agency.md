@@ -13,21 +13,21 @@ Layer 0 can record events from actors, hash-chain them, verify integrity, track 
 **Observer → Participant**
 
 An actor that merely records becomes an actor that acts with purpose. Three new capabilities emerge that Layer 0 cannot express:
-1. **Intention** — acting toward a goal, not just reacting to events
-2. **Attention** — choosing what to process, not processing everything
-3. **Autonomy** — acting independently, not just when directed
+1. **Volition** — acting toward what matters, not just reacting to events
+2. **Action** — producing effects in the world, not just recording them
+3. **Communication** — exchanging signals with other actors
 
 ### Base Operations
 
 What can an agent DO that a recorder cannot?
 
-1. **Set a goal** — declare an intended future state
-2. **Choose** — select one action over alternatives
-3. **Focus** — prioritize some inputs over others
-4. **Delegate** — transfer responsibility while retaining accountability
-5. **Commit** — bind oneself to a future action
+1. **Value** — identify what matters and why
+2. **Intend** — declare a desired future state
+3. **Choose** — select one action over alternatives
+4. **Act** — produce effects in the world
+5. **Signal** — send structured information to others
 
-These are the irreducible operations of agency. Each requires representing something that doesn't yet exist (a goal, a plan, a commitment) — which is precisely what Layer 0 lacks.
+These are the irreducible operations of agency. Each requires representing something that doesn't yet exist (an intent, a choice, a commitment) — which is precisely what Layer 0 lacks.
 
 ### Semantic Dimensions
 
@@ -39,47 +39,47 @@ These are the irreducible operations of agency. Each requires representing somet
 | **Binding** | Uncommitted (assessable) / Committed (binding) | Is this an assessment or a commitment? |
 
 **Justification:** These four dimensions capture the essential axes of agency as studied in philosophy of action (Bratman's planning theory), cognitive science (attention models), and organisational theory (delegation/accountability). Each varies independently:
-- A goal is future + proactive + internal + committed
-- A filter is present + reactive + internal + uncommitted
-- A delegation is present + proactive + external + committed
-- An accountability trace is past + reactive + external + uncommitted
+- An intent is future + proactive + internal + committed
+- A resource is present + reactive + internal + uncommitted
+- A signal is present + proactive + external + committed
+- A consequence is past + reactive + external + uncommitted
 
 ### Decomposition
 
 Applying dimensions to base operations:
 
-**Group 0 — Intention** (future-oriented, committed)
+**Group 0 — Volition** (what matters, what to pursue)
 
 | Primitive | Temporal | Initiative | Scope | Binding | What it does |
 |-----------|----------|------------|-------|---------|--------------|
-| **Goal** | Future | Proactive | Internal | Committed | Sets an intended future state |
-| **Plan** | Future | Proactive | Internal | Committed | Decomposes a goal into steps |
-| **Initiative** | Present | Proactive | External | Committed | Acts without being asked |
-| **Commitment** | Past→Present | Reactive | Internal | Uncommitted | Tracks follow-through on goals |
+| **Value** | Future | Proactive | Internal | Committed | Identifies what matters and why |
+| **Intent** | Future | Proactive | Internal | Committed | Declares a desired future state |
+| **Choice** | Present | Proactive | Internal | Committed | Selects one action over alternatives |
+| **Risk** | Future | Reactive | Internal | Uncommitted | Assesses potential negative consequences of action |
 
-Gap check: "I want X" (Goal), "here's how" (Plan), "I'll start now" (Initiative), "did I follow through?" (Commitment). This covers the intention lifecycle.
+Gap check: "This matters" (Value), "I want X" (Intent), "I pick this over that" (Choice), "what could go wrong?" (Risk). This covers the volition lifecycle.
 
-**Group 1 — Attention** (present-oriented, filtering)
-
-| Primitive | Temporal | Initiative | Scope | Binding | What it does |
-|-----------|----------|------------|-------|---------|--------------|
-| **Focus** | Present | Proactive | Internal | Uncommitted | Directs processing to priorities |
-| **Filter** | Present | Reactive | Internal | Uncommitted | Suppresses noise |
-| **Salience** | Present | Reactive | External | Uncommitted | Detects what matters in context |
-| **Distraction** | Present | Reactive | Internal | Uncommitted | Detects attention pulled from goals |
-
-Gap check: "Look at this" (Focus), "ignore that" (Filter), "this matters" (Salience), "I'm off track" (Distraction). This covers attention management.
-
-**Group 2 — Autonomy** (scope of independent action)
+**Group 1 — Action** (producing effects)
 
 | Primitive | Temporal | Initiative | Scope | Binding | What it does |
 |-----------|----------|------------|-------|---------|--------------|
-| **Permission** | Present | Reactive | External | Committed | Requests and tracks action permissions |
-| **Capability** | Present | Reactive | Internal | Uncommitted | Tracks what an actor can do |
-| **Delegation** | Present | Proactive | External | Committed | Assigns tasks or authority to others |
-| **Accountability** | Past | Reactive | External | Uncommitted | Traces responsibility chains |
+| **Act** | Present | Proactive | External | Committed | Produces an effect in the world |
+| **Consequence** | Past | Reactive | External | Uncommitted | The effects that result from action |
+| **Capacity** | Present | Reactive | Internal | Uncommitted | What an actor is able to do |
+| **Resource** | Present | Reactive | Internal | Uncommitted | What an actor has available to use |
 
-Gap check: "May I?" (Permission), "Can I?" (Capability), "You do it" (Delegation), "Who's responsible?" (Accountability). This covers the autonomy-responsibility spectrum.
+Gap check: "Do this" (Act), "this happened because of that" (Consequence), "I can do X" (Capacity), "I have Y available" (Resource). This covers the action lifecycle.
+
+**Group 2 — Communication** (exchanging signals)
+
+| Primitive | Temporal | Initiative | Scope | Binding | What it does |
+|-----------|----------|------------|-------|---------|--------------|
+| **Signal** | Present | Proactive | External | Committed | Sends structured information to others |
+| **Reception** | Present | Reactive | External | Uncommitted | Receives and processes incoming signals |
+| **Acknowledgment** | Present | Reactive | External | Committed | Confirms receipt and understanding |
+| **Commitment** | Past→Present | Reactive | Internal | Committed | Binds oneself to a future action |
+
+Gap check: "Here's what I'm saying" (Signal), "I received that" (Reception), "I understand" (Acknowledgment), "I will do this" (Commitment). This covers the communication lifecycle.
 
 ### Gap Analysis
 
@@ -87,22 +87,21 @@ Gap check: "May I?" (Permission), "Can I?" (Capability), "You do it" (Delegation
 
 | Behavior | Maps to | Notes |
 |----------|---------|-------|
-| AI agent sets a task objective | Goal | |
-| Agent breaks task into subtasks | Plan | |
-| Agent decides to act without instruction | Initiative | |
-| Agent completes 8 of 10 planned tasks | Commitment (tracks ratio) | |
-| Agent prioritises urgent bug over feature | Focus | |
-| Agent ignores noisy log events | Filter | |
-| Agent detects a security alert is important | Salience | |
-| Agent notices it's been on a tangent | Distraction | |
-| Agent asks human "may I deploy?" | Permission | |
-| Agent reports its available skills | Capability | |
-| Agent assigns subtask to another agent | Delegation | |
-| Bug traced to agent that approved bad PR | Accountability | |
-| Agent changes its mind about a goal | Goal (goal.abandoned) | |
-| Agent revises a plan after new information | Plan (plan.revised) | |
-| Human checks what AI agent is doing | Focus + Accountability | Composition |
-| Agent reports why it took an action | Initiative + Accountability | Composition |
+| AI agent identifies what matters | Value | |
+| Agent sets a task objective | Intent | |
+| Agent picks approach A over approach B | Choice | |
+| Agent assesses risk of deployment | Risk | |
+| Agent executes a build step | Act | |
+| Agent traces what happened from an action | Consequence | |
+| Agent reports its available skills | Capacity | |
+| Agent checks available compute budget | Resource | |
+| Agent sends a status update | Signal | |
+| Agent processes incoming event | Reception | |
+| Agent confirms receipt of a directive | Acknowledgment | |
+| Agent promises to complete a task by deadline | Commitment | |
+| Agent changes its mind about an intent | Intent (intent.abandoned) | |
+| Human checks what AI agent is doing | Signal + Consequence | Composition |
+| Agent reports why it took an action | Choice + Consequence | Composition |
 
 **No gaps found.** All tested agency behaviors map to a single primitive or a composition of two primitives.
 
@@ -110,9 +109,9 @@ Gap check: "May I?" (Permission), "Can I?" (Capability), "You do it" (Delegation
 
 1. **Dimensional coverage:** All meaningful combinations of {temporal, initiative, scope, binding} have a primitive or are degenerate (e.g., past + proactive + internal + committed = a completed commitment, which is Commitment tracking completion, not a separate primitive).
 
-2. **Lifecycle coverage:** The intention lifecycle (set → plan → act → assess) maps to Goal → Plan → Initiative → Commitment. The attention lifecycle (detect → focus → filter → notice drift) maps to Salience → Focus → Filter → Distraction. The autonomy lifecycle (can → may → delegate → trace) maps to Capability → Permission → Delegation → Accountability.
+2. **Lifecycle coverage:** The volition lifecycle (value → intend → choose → assess risk) maps to Value → Intent → Choice → Risk. The action lifecycle (act → observe consequence → check capacity → allocate resource) maps to Act → Consequence → Capacity → Resource. The communication lifecycle (signal → receive → acknowledge → commit) maps to Signal → Reception → Acknowledgment → Commitment.
 
-3. **Layer boundary:** None of these primitives require concepts from Layer 2 (Exchange). Agency is about individual actors — it doesn't model interaction between actors (that's Exchange's gap). An agent can set goals, plan, focus, and delegate without needing reciprocity, negotiation, or agreement.
+3. **Layer boundary:** None of these primitives require concepts from Layer 2 (Exchange). Agency is about individual actors — it doesn't model interaction between actors (that's Exchange's gap). An agent can value, intend, choose, and act without needing reciprocity, negotiation, or agreement.
 
 ---
 

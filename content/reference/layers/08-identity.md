@@ -6,22 +6,22 @@
 
 Layer 7 reasons about what should be done, but treats actors as interchangeable moral agents. Any actor with the same values, facing the same dilemma, should reach the same conclusion. There's no concept of an actor's unique character, personal history, or sense of self. An actor can behave ethically without knowing *who they are*.
 
-**Test:** Can you express "Alice has grown from her early mistakes into someone who values transparency above all, and this is fundamentally different from who she was three years ago, yet she's still recognisably Alice" in Layer 7? You can assess her actions ethically and track her moral growth. But "who she is" (self-model), "fundamentally different yet recognisably the same" (persistence through transformation), and "values transparency above all" (identity-defining commitment rather than abstract value) have no Layer 7 representation. Doing right is not the same as being someone.
+**Test:** Can you express "Alice has grown from her early mistakes into someone who values transparency above all, and this is fundamentally different from who she was three years ago, yet she's still recognisably Alice" in Layer 7? You can assess her actions ethically and track her moral responsibility. But "who she is" (self-concept), "fundamentally different yet recognisably the same" (continuity through transformation), and "values transparency above all" (identity-defining commitment rather than abstract duty) have no Layer 7 representation. Doing right is not the same as being someone.
 
 ### The Transition
 
 **Doing → Being**
 
-An actor that does things becomes an actor that *is* something. The fundamental new capacity: self-knowledge, continuity through change, and recognition by others as a unique entity.
+An actor that does things becomes an actor that *is* something. The fundamental new capacity: self-knowledge, continuity through change, and authentic expression of who one is.
 
 ### Base Operations
 
 What can a self-aware actor DO that a merely ethical one cannot?
 
-1. **Model self** — form an accurate picture of one's own nature
+1. **Reflect** — form an accurate picture of one's own nature
 2. **Persist** — maintain identity through change
-3. **Define boundaries** — establish where one ends and another begins
-4. **Seek recognition** — be seen and acknowledged as unique
+3. **Express** — manifest who one is through action
+4. **Grow** — develop and transform over time
 
 ### Semantic Dimensions
 
@@ -38,62 +38,62 @@ What can a self-aware actor DO that a merely ethical one cannot?
 
 | Primitive | Orientation | Temporality | Stability | Agency | What it does |
 |-----------|-------------|-------------|-----------|--------|--------------|
-| **SelfModel** | Inward | Synchronic | Dynamic | Active | An actor's model of itself |
-| **Authenticity** | Inward | Synchronic | Both | Active | Alignment between self-model and behaviour |
-| **NarrativeIdentity** | Inward | Diachronic | Dynamic | Active | The story an actor tells about itself |
-| **Boundary** | Outward | Synchronic | Constant | Active | Where one actor ends and another begins |
+| **Narrative** | Inward | Diachronic | Dynamic | Active | The story an actor tells about itself |
+| **SelfConcept** | Inward | Synchronic | Dynamic | Active | An actor's model of itself |
+| **Reflection** | Inward | Synchronic | Both | Active | The capacity to examine one's own states and processes |
+| **Memory** | Inward | Diachronic | Constant | Passive | Retention of past experience that shapes present identity |
 
-Self-knowledge lifecycle: actors form self-models (SelfModel) → check alignment with behaviour (Authenticity) → construct a story across time (NarrativeIdentity) → and define limits (Boundary). Boundary is the transition to outward — it defines the self in relation to others.
+Self-knowledge lifecycle: actors construct a narrative across time (Narrative) → form a self-concept at each moment (SelfConcept) → examine their own states (Reflection) → and retain past experience (Memory). Memory grounds identity in history.
 
-**Group 1 — Continuity** (persisting through change)
+**Group 1 — Self-Direction** (where you're going)
 
 | Primitive | Orientation | Temporality | Stability | Agency | What it does |
 |-----------|-------------|-------------|-----------|--------|--------------|
-| **Persistence** | Inward | Diachronic | Constant | Passive | What stays the same as everything else changes |
-| **Transformation** | Inward | Diachronic | Dynamic | Active | Fundamental changes in identity |
-| **Heritage** | Inward | Diachronic | Constant | Passive | What came before — identity from history |
+| **Purpose** | Inward | Diachronic | Constant | Active | What gives an actor's existence meaning |
 | **Aspiration** | Inward | Diachronic | Dynamic | Active | Who the actor wants to become |
+| **Authenticity** | Inward | Synchronic | Both | Active | Alignment between self-concept and behaviour |
+| **Expression** | Outward | Synchronic | Dynamic | Active | Manifesting who one is through action |
 
-Continuity lifecycle: some things persist (Persistence) → while fundamental changes occur (Transformation) → rooted in history (Heritage) → and oriented toward who one wants to become (Aspiration). The constant/dynamic distinction captures the philosophical puzzle of identity through change.
+Self-direction lifecycle: purpose provides orientation (Purpose) → aspirations point toward the future (Aspiration) → authenticity aligns inner and outer (Authenticity) → and expression makes identity visible (Expression). Expression is the transition to outward — it makes the inner self visible to others.
 
-**Group 2 — Recognition** (being seen)
+**Group 2 — Self-Becoming** (how you change)
 
 | Primitive | Orientation | Temporality | Stability | Agency | What it does |
 |-----------|-------------|-------------|-----------|--------|--------------|
-| **Dignity** | Outward | Synchronic | Constant | Passive | The inherent worth of every actor |
-| **Acknowledgement** | Outward | Synchronic | Dynamic | Passive | Being seen and recognised by others |
-| **Uniqueness** | Outward | Synchronic | Constant | Active | What makes each actor distinct |
-| **Memorial** | Outward | Diachronic | Constant | Passive | Honouring actors who have left |
+| **Growth** | Inward | Diachronic | Dynamic | Active | Developing new capabilities and understanding |
+| **Continuity** | Inward | Diachronic | Constant | Passive | What stays the same as everything else changes |
+| **Integration** | Inward | Synchronic | Both | Active | Bringing conflicting parts of self into coherence |
+| **Crisis** | Inward | Synchronic | Dynamic | Passive | When identity breaks down and must be rebuilt |
 
-Recognition lifecycle: every actor has inherent worth (Dignity) → that worth is recognised by others (Acknowledgement) → each actor's distinctness is identified (Uniqueness) → and presence is preserved even after departure (Memorial). The DIGNITY invariant flows through this group — agents are entities with identity, state, and lifecycle, not disposable functions.
+Self-becoming lifecycle: actors grow and develop (Growth) → while core identity persists (Continuity) → conflicting parts are brought into coherence (Integration) → or identity breaks down (Crisis). The constant/dynamic distinction captures the philosophical puzzle of identity through change.
 
 ### Gap Analysis
 
 | Behavior | Maps to | Notes |
 |----------|---------|-------|
-| "I know my strengths and weaknesses" | SelfModel | |
-| "I'm acting consistently with my values" | Authenticity | |
-| "Here's the story of how I got here" | NarrativeIdentity | |
-| "That's not my responsibility — it's outside my scope" | Boundary | |
-| "My core commitment to honesty hasn't changed" | Persistence | |
-| "After the crisis, I became a different kind of leader" | Transformation | |
-| "I was trained on this dataset, by these people" | Heritage | |
+| "Here's the story of how I got here" | Narrative | |
+| "I know my strengths and weaknesses" | SelfConcept | |
+| "Let me examine why I made that choice" | Reflection | |
+| "I remember when we first started" | Memory | |
+| "I exist to make AI accountable" | Purpose | |
 | "I want to become better at empathy" | Aspiration | |
-| "Every participant deserves respect" | Dignity | |
-| "Thank you for noticing my contribution" | Acknowledgement | |
-| "No one else approaches problems this way" | Uniqueness | |
-| "In memory of Agent-7, who served for 3 years" | Memorial | |
-| Identity crisis | SelfModel + Authenticity + Transformation | Composition |
-| Actor retirement ceremony | Memorial + Dignity + L10.Ceremony | Cross-layer composition |
-| Self-improvement plan | SelfModel + Aspiration + L1.Goal | Cross-layer composition |
+| "I'm acting consistently with my values" | Authenticity | |
+| "This code reflects my design philosophy" | Expression | |
+| "After the crisis, I became a different kind of leader" | Growth | |
+| "My core commitment to honesty hasn't changed" | Continuity | |
+| "I've reconciled my analytical and creative sides" | Integration | |
+| "I don't know who I am anymore" | Crisis | |
+| Identity crisis | Crisis + SelfConcept + Reflection | Composition |
+| Self-improvement plan | SelfConcept + Aspiration + L1.Intent | Cross-layer composition |
+| Memoir writing | Narrative + Memory + Expression | Composition |
 
 **No gaps found.**
 
 ### Completeness Argument
 
-1. **Dimensional coverage:** The {orientation, temporality, stability, agency} space is covered. The inward/outward distinction ensures identity isn't solipsistic — it includes how actors are known by others. The synchronic/diachronic distinction captures both moment-to-moment and long-term identity.
+1. **Dimensional coverage:** The {orientation, temporality, stability, agency} space is covered. The inward/outward distinction ensures identity isn't solipsistic — Expression includes how actors make themselves known. The synchronic/diachronic distinction captures both moment-to-moment and long-term identity.
 
-2. **Philosophical coverage:** The three major theories of personal identity — psychological continuity (Persistence, Transformation), narrative identity (NarrativeIdentity, Heritage), and recognition theory (Dignity, Acknowledgement) — are all represented.
+2. **Philosophical coverage:** The three major theories of personal identity — psychological continuity (Continuity, Growth), narrative identity (Narrative, Memory), and recognition theory (Expression, Authenticity) — are all represented.
 
 3. **Layer boundary:** None of these require concepts from Layer 9 (Relationship). Identity is about individual actors' sense of self. Relationships as entities in their own right — with their own depth, repair cycles, and intimacy — are Layer 9's gap.
 
@@ -105,7 +105,7 @@ Full specifications in `docs/primitives.md` (Layer 8 section).
 
 ## Product Graph
 
-Layer 8 maps to the **Identity Graph** — self-sovereign identity with narrative and heritage. See `docs/product-layers.md`.
+Layer 8 maps to the **Identity Graph** — self-sovereign identity with narrative and purpose. See `docs/product-layers.md`.
 
 ## Reference
 
