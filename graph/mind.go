@@ -189,7 +189,6 @@ func (m *Mind) callClaude(ctx context.Context, systemPrompt string, messages []c
 		"-p", prompt.String(),
 		"--output-format", "text",
 		"--model", "claude-sonnet-4-6",
-		"--max-turns", "1",
 	)
 	cmd.Env = append(cmd.Environ(), "CLAUDE_CODE_OAUTH_TOKEN="+m.token)
 
