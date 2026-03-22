@@ -85,7 +85,7 @@ func appLayout(space Space, spaces []Space, activeLens string, user ViewUser) te
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</head><body class=\"bg-void text-warm-secondary min-h-screen flex flex-col\"><header class=\"border-b border-edge bg-surface flex-shrink-0\"><nav class=\"px-4 md:px-6 py-3 flex items-center justify-between\"><div class=\"flex items-center gap-2 md:gap-4 min-w-0\"><a href=\"/\" class=\"text-xl font-bold text-brand brand-breathe flex-shrink-0\">lovyou.ai</a> <span class=\"text-warm-faint hidden md:inline\">/</span> <a href=\"/app\" class=\"text-sm font-medium hover:text-brand transition-colors text-warm-muted hidden md:inline\">App</a> <span class=\"text-warm-faint\">/</span> <span class=\"text-sm text-warm-secondary truncate\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</head><body class=\"bg-void text-warm-secondary h-screen flex flex-col overflow-hidden\"><header class=\"border-b border-edge bg-surface flex-shrink-0\"><nav class=\"px-4 md:px-6 py-3 flex items-center justify-between\"><div class=\"flex items-center gap-2 md:gap-4 min-w-0\"><a href=\"/\" class=\"text-xl font-bold text-brand brand-breathe flex-shrink-0\">lovyou.ai</a> <span class=\"text-warm-faint hidden md:inline\">/</span> <a href=\"/app\" class=\"text-sm font-medium hover:text-brand transition-colors text-warm-muted hidden md:inline\">App</a> <span class=\"text-warm-faint\">/</span> <span class=\"text-sm text-warm-secondary truncate\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -203,7 +203,7 @@ func appLayout(space Space, spaces []Space, activeLens string, user ViewUser) te
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "</div></nav><div class=\"flex flex-1 overflow-hidden\"><!-- Sidebar --><aside class=\"w-60 border-r border-edge bg-surface flex-shrink-0 overflow-y-auto hidden md:block\"><div class=\"p-4 space-y-6\"><!-- Lenses --><div><h2 class=\"text-[10px] font-semibold text-warm-faint uppercase tracking-wider mb-2\">Views</h2><nav class=\"space-y-0.5\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "</div></nav><div class=\"flex flex-1 min-h-0 overflow-hidden\"><!-- Sidebar --><aside class=\"w-60 border-r border-edge bg-surface flex-shrink-0 overflow-y-auto hidden md:block\"><div class=\"p-4 space-y-6\"><!-- Lenses --><div><h2 class=\"text-[10px] font-semibold text-warm-faint uppercase tracking-wider mb-2\">Views</h2><nav class=\"space-y-0.5\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

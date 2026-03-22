@@ -48,7 +48,7 @@ templ appLayout(space Space, spaces []Space, activeLens string, user ViewUser) {
 			<script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.8/dist/htmx.min.js"></script>
 			@themeBlock()
 		</head>
-		<body class="bg-void text-warm-secondary min-h-screen flex flex-col">
+		<body class="bg-void text-warm-secondary h-screen flex flex-col overflow-hidden">
 			<header class="border-b border-edge bg-surface flex-shrink-0">
 				<nav class="px-4 md:px-6 py-3 flex items-center justify-between">
 					<div class="flex items-center gap-2 md:gap-4 min-w-0">
@@ -92,7 +92,7 @@ templ appLayout(space Space, spaces []Space, activeLens string, user ViewUser) {
 					@mobileLensTab(space.Slug, "settings", "Settings", activeLens)
 				</div>
 			</nav>
-			<div class="flex flex-1 overflow-hidden">
+			<div class="flex flex-1 min-h-0 overflow-hidden">
 				<!-- Sidebar -->
 				<aside class="w-60 border-r border-edge bg-surface flex-shrink-0 overflow-y-auto hidden md:block">
 					<div class="p-4 space-y-6">
