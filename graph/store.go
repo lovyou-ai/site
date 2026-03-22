@@ -547,7 +547,8 @@ type ConversationSummary struct {
 }
 
 // ListConversations returns conversations in a space that involve the given user.
-func (s *Store) ListConversations(ctx context.Context, spaceID, userName string) ([]ConversationSummary, error) {
+// Matches on user name, user ID, or author — covers both old (name-based) and new (ID-based) tags.
+func (s *Store) ListConversations(ctx context.Context, spaceID, userName, userID string) ([]ConversationSummary, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT n.id, n.space_id, n.parent_id, n.kind, n.title, n.body,
 		       n.state, n.priority, n.assignee, n.author, n.author_kind, n.tags, n.due_date,
@@ -562,8 +563,8 @@ func (s *Store) ListConversations(ctx context.Context, spaceID, userName string)
 		    ORDER BY c.created_at DESC LIMIT 1
 		) lm ON true
 		WHERE n.space_id = $1 AND n.kind = 'conversation'
-		  AND ($2 = ANY(n.tags) OR n.author = $2)
-		ORDER BY n.updated_at DESC`, spaceID, userName)
+		  AND ($2 = ANY(n.tags) OR $3 = ANY(n.tags) OR n.author = $2)
+		ORDER BY n.updated_at DESC`, spaceID, userName, userID)
 	if err != nil {
 		return nil, fmt.Errorf("list conversations: %w", err)
 	}

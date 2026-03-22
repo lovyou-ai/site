@@ -172,7 +172,7 @@ func TestConversations(t *testing.T) {
 	}
 
 	// List conversations for participant.
-	convos, err := store.ListConversations(ctx, space.ID, "alice")
+	convos, err := store.ListConversations(ctx, space.ID, "alice", "alice-id")
 	if err != nil {
 		t.Fatalf("list conversations: %v", err)
 	}
@@ -184,7 +184,7 @@ func TestConversations(t *testing.T) {
 	}
 
 	// Non-participant shouldn't see it.
-	convos, err = store.ListConversations(ctx, space.ID, "charlie")
+	convos, err = store.ListConversations(ctx, space.ID, "charlie", "charlie-id")
 	if err != nil {
 		t.Fatalf("list conversations: %v", err)
 	}
@@ -204,7 +204,7 @@ func TestConversations(t *testing.T) {
 		t.Fatalf("create message: %v", err)
 	}
 
-	convos, err = store.ListConversations(ctx, space.ID, "alice")
+	convos, err = store.ListConversations(ctx, space.ID, "alice", "alice-id")
 	if err != nil {
 		t.Fatalf("list conversations: %v", err)
 	}

@@ -486,7 +486,7 @@ func (h *Handlers) handleConversations(w http.ResponseWriter, r *http.Request) {
 	spaces, _ := h.store.ListSpaces(r.Context(), h.userID(r))
 	actor := h.userName(r)
 
-	convos, err := h.store.ListConversations(r.Context(), space.ID, actor)
+	convos, err := h.store.ListConversations(r.Context(), space.ID, actor, h.userID(r))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -987,12 +987,17 @@ func (h *Handlers) handleOp(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "title required", http.StatusBadRequest)
 			return
 		}
-		// Participants: the actor + anyone listed in "participants" (comma-separated).
+		// Participants: actor name + ID + anyone listed in "participants" (comma-separated).
+		// Store both name and ID so conversations can be found by either.
+		actorID := h.userID(r)
 		participants := []string{actor}
+		if actorID != actor {
+			participants = append(participants, actorID)
+		}
 		if p := strings.TrimSpace(r.FormValue("participants")); p != "" {
 			for _, name := range strings.Split(p, ",") {
 				name = strings.TrimSpace(name)
-				if name != "" && name != actor {
+				if name != "" && name != actor && name != actorID {
 					participants = append(participants, name)
 				}
 			}
