@@ -229,11 +229,13 @@ func main() {
 		ds := make([]views.DiscoverSpace, len(spaces))
 		for i, sp := range spaces {
 			ds[i] = views.DiscoverSpace{
-				Slug:        sp.Slug,
-				Name:        sp.Name,
-				Description: sp.Description,
-				Kind:        sp.Kind,
-				CreatedAt:   sp.CreatedAt,
+				Slug:         sp.Slug,
+				Name:         sp.Name,
+				Description:  sp.Description,
+				Kind:         sp.Kind,
+				CreatedAt:    sp.CreatedAt,
+				NodeCount:    sp.NodeCount,
+				LastActivity: sp.LastActivity,
 			}
 		}
 		views.DiscoverPage(ds).Render(r.Context(), w)

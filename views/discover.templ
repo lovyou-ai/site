@@ -1,14 +1,19 @@
 package views
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // DiscoverSpace holds public space info for the discover page.
 type DiscoverSpace struct {
-	Slug        string
-	Name        string
-	Description string
-	Kind        string
-	CreatedAt   time.Time
+	Slug         string
+	Name         string
+	Description  string
+	Kind         string
+	CreatedAt    time.Time
+	NodeCount    int
+	LastActivity *time.Time
 }
 
 templ DiscoverPage(spaces []DiscoverSpace) {
@@ -49,7 +54,41 @@ templ discoverCard(sp DiscoverSpace) {
 		if sp.Description != "" {
 			<p class="text-sm text-warm-muted mt-1 leading-relaxed">{ sp.Description }</p>
 		}
+		<div class="flex items-center gap-3 mt-3 text-xs text-warm-faint">
+			if sp.NodeCount > 0 {
+				<span>{ fmt.Sprintf("%d", sp.NodeCount) } { pluralize(sp.NodeCount, "item", "items") }</span>
+			}
+			if sp.LastActivity != nil {
+				<span>{ relativeTime(*sp.LastActivity) }</span>
+			}
+		</div>
 	</a>
+}
+
+func pluralize(n int, singular, plural string) string {
+	if n == 1 {
+		return singular
+	}
+	return plural
+}
+
+func relativeTime(t time.Time) string {
+	d := time.Since(t)
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		m := int(d.Minutes())
+		return fmt.Sprintf("%dm ago", m)
+	case d < 24*time.Hour:
+		h := int(d.Hours())
+		return fmt.Sprintf("%dh ago", h)
+	case d < 30*24*time.Hour:
+		days := int(d.Hours() / 24)
+		return fmt.Sprintf("%dd ago", days)
+	default:
+		return t.Format("Jan 2006")
+	}
 }
 
 func discoverKindClass(kind string) string {
