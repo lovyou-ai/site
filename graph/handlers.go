@@ -114,8 +114,26 @@ func (h *Handlers) userKind(r *http.Request) string {
 	return u.Kind
 }
 
-// spaceFromRequest returns a space only if the current user owns it (for writes).
+// spaceFromRequest returns a space for write operations.
+// Owners can always write. Authenticated users can write to public spaces.
 func (h *Handlers) spaceFromRequest(r *http.Request) (*Space, error) {
+	slug := r.PathValue("slug")
+	space, err := h.store.GetSpaceBySlug(r.Context(), slug)
+	if err != nil {
+		return nil, err
+	}
+	uid := h.userID(r)
+	if space.OwnerID == uid {
+		return space, nil
+	}
+	if space.Visibility == VisibilityPublic && uid != "anonymous" {
+		return space, nil
+	}
+	return nil, ErrNotFound
+}
+
+// spaceOwnerOnly returns a space only if the current user owns it.
+func (h *Handlers) spaceOwnerOnly(r *http.Request) (*Space, error) {
 	slug := r.PathValue("slug")
 	space, err := h.store.GetSpaceBySlug(r.Context(), slug)
 	if err != nil {
@@ -250,7 +268,7 @@ func (h *Handlers) handleCreateSpace(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) handleSpaceSettings(w http.ResponseWriter, r *http.Request) {
-	space, err := h.spaceFromRequest(r)
+	space, err := h.spaceOwnerOnly(r)
 	if errors.Is(err, ErrNotFound) {
 		http.NotFound(w, r)
 		return
@@ -265,7 +283,7 @@ func (h *Handlers) handleSpaceSettings(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) handleUpdateSpace(w http.ResponseWriter, r *http.Request) {
-	space, err := h.spaceFromRequest(r)
+	space, err := h.spaceOwnerOnly(r)
 	if errors.Is(err, ErrNotFound) {
 		http.NotFound(w, r)
 		return
@@ -297,7 +315,7 @@ func (h *Handlers) handleUpdateSpace(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) handleDeleteSpace(w http.ResponseWriter, r *http.Request) {
-	space, err := h.spaceFromRequest(r)
+	space, err := h.spaceOwnerOnly(r)
 	if errors.Is(err, ErrNotFound) {
 		http.NotFound(w, r)
 		return
