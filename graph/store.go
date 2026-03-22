@@ -880,21 +880,30 @@ func (s *Store) ListNodeOps(ctx context.Context, nodeID string) ([]Op, error) {
 // ────────────────────────────────────────────────────────────────────
 
 // ListAvailableTasks returns open, unassigned tasks from public spaces.
-// This is the marketplace: work that's available for anyone to claim.
-func (s *Store) ListAvailableTasks(ctx context.Context, limit int) ([]Node, error) {
+// If query is non-empty, filters by title/body text search.
+func (s *Store) ListAvailableTasks(ctx context.Context, query string, limit int) ([]Node, error) {
 	if limit <= 0 {
 		limit = 50
 	}
-	rows, err := s.db.QueryContext(ctx, `
+	baseQuery := `
 		SELECT n.id, n.space_id, COALESCE(n.parent_id, ''), n.kind, n.title, n.body,
 		       n.state, n.priority, n.assignee, n.author, n.author_id, n.author_kind,
 		       n.tags, n.due_date, n.created_at, n.updated_at, 0, 0, 0
 		FROM nodes n
 		JOIN spaces s ON s.id = n.space_id AND s.visibility = 'public'
 		WHERE n.kind = 'task' AND n.state = 'open' AND n.assignee = ''
-		  AND n.parent_id IS NULL
-		ORDER BY n.priority = 'urgent' DESC, n.priority = 'high' DESC, n.created_at DESC
-		LIMIT $1`, limit)
+		  AND n.parent_id IS NULL`
+	args := []any{}
+	argN := 1
+	if query != "" {
+		baseQuery += fmt.Sprintf(" AND (n.title ILIKE '%%' || $%d || '%%' OR n.body ILIKE '%%' || $%d || '%%')", argN, argN)
+		args = append(args, query)
+		argN++
+	}
+	baseQuery += fmt.Sprintf(" ORDER BY n.priority = 'urgent' DESC, n.priority = 'high' DESC, n.created_at DESC LIMIT $%d", argN)
+	args = append(args, limit)
+
+	rows, err := s.db.QueryContext(ctx, baseQuery, args...)
 	if err != nil {
 		return nil, err
 	}

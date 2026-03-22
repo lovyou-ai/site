@@ -268,7 +268,8 @@ func main() {
 			views.MarketPage(nil).Render(r.Context(), w)
 			return
 		}
-		nodes, err := graphStore.ListAvailableTasks(r.Context(), 50)
+		query := r.URL.Query().Get("q")
+		nodes, err := graphStore.ListAvailableTasks(r.Context(), query, 50)
 		if err != nil {
 			log.Printf("market: %v", err)
 		}
