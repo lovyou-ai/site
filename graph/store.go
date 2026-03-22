@@ -215,6 +215,15 @@ CREATE INDEX IF NOT EXISTS idx_ops_op ON ops(space_id, op);
 ALTER TABLE spaces ADD COLUMN IF NOT EXISTS visibility TEXT NOT NULL DEFAULT 'private';
 ALTER TABLE nodes ADD COLUMN IF NOT EXISTS author_kind TEXT NOT NULL DEFAULT 'human';
 ALTER TABLE nodes ADD COLUMN IF NOT EXISTS author_id TEXT NOT NULL DEFAULT '';
+
+CREATE TABLE IF NOT EXISTS node_deps (
+    node_id    TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+    depends_on TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (node_id, depends_on)
+);
+CREATE INDEX IF NOT EXISTS idx_node_deps_node ON node_deps(node_id);
+CREATE INDEX IF NOT EXISTS idx_node_deps_dep ON node_deps(depends_on);
 ALTER TABLE ops ADD COLUMN IF NOT EXISTS actor_id TEXT NOT NULL DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS mind_state (
@@ -455,7 +464,7 @@ func (s *Store) GetNode(ctx context.Context, id string) (*Node, error) {
 		       n.created_at, n.updated_at,
 		       COALESCE((SELECT COUNT(*) FROM nodes c WHERE c.parent_id = n.id), 0),
 		       COALESCE((SELECT COUNT(*) FROM nodes c WHERE c.parent_id = n.id AND c.state = 'done'), 0),
-		       0
+		       COALESCE((SELECT COUNT(*) FROM node_deps d JOIN nodes b ON b.id = d.depends_on WHERE d.node_id = n.id AND b.state != 'done'), 0)
 		FROM nodes n WHERE n.id = $1`, id,
 	).Scan(
 		&n.ID, &n.SpaceID, &parentID, &n.Kind, &n.Title, &n.Body,
@@ -488,7 +497,7 @@ func (s *Store) ListNodes(ctx context.Context, p ListNodesParams) ([]Node, error
 		       n.created_at, n.updated_at,
 		       COALESCE((SELECT COUNT(*) FROM nodes c WHERE c.parent_id = n.id), 0),
 		       COALESCE((SELECT COUNT(*) FROM nodes c WHERE c.parent_id = n.id AND c.state = 'done'), 0),
-		       0
+		       COALESCE((SELECT COUNT(*) FROM node_deps d JOIN nodes b ON b.id = d.depends_on WHERE d.node_id = n.id AND b.state != 'done'), 0)
 		FROM nodes n
 		WHERE n.space_id = $1`
 
@@ -854,6 +863,57 @@ func (s *Store) ListNodeOps(ctx context.Context, nodeID string) ([]Op, error) {
 // ────────────────────────────────────────────────────────────────────
 // Helpers
 // ────────────────────────────────────────────────────────────────────
+
+// ────────────────────────────────────────────────────────────────────
+// Dependencies
+// ────────────────────────────────────────────────────────────────────
+
+// AddDependency marks nodeID as depending on dependsOn.
+func (s *Store) AddDependency(ctx context.Context, nodeID, dependsOn string) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO node_deps (node_id, depends_on) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+		nodeID, dependsOn)
+	return err
+}
+
+// ListBlockers returns nodes that block the given node (incomplete dependencies).
+func (s *Store) ListBlockers(ctx context.Context, nodeID string) ([]Node, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT n.id, n.space_id, COALESCE(n.parent_id, ''), n.kind, n.title, n.body,
+		       n.state, n.priority, n.assignee, n.author, n.author_id, n.author_kind,
+		       n.tags, n.due_date, n.created_at, n.updated_at, 0, 0, 0
+		FROM nodes n
+		JOIN node_deps d ON d.depends_on = n.id
+		WHERE d.node_id = $1 AND n.state != 'done'
+		ORDER BY n.created_at`, nodeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var nodes []Node
+	for rows.Next() {
+		var n Node
+		var parentID sql.NullString
+		var dueDate sql.NullTime
+		if err := rows.Scan(
+			&n.ID, &n.SpaceID, &parentID, &n.Kind, &n.Title, &n.Body,
+			&n.State, &n.Priority, &n.Assignee, &n.Author, &n.AuthorID, &n.AuthorKind,
+			pq.Array(&n.Tags), &dueDate, &n.CreatedAt, &n.UpdatedAt,
+			&n.ChildCount, &n.ChildDone, &n.BlockerCount,
+		); err != nil {
+			return nil, err
+		}
+		if parentID.Valid {
+			n.ParentID = parentID.String
+		}
+		if dueDate.Valid {
+			d := dueDate.Time
+			n.DueDate = &d
+		}
+		nodes = append(nodes, n)
+	}
+	return nodes, rows.Err()
+}
 
 // ────────────────────────────────────────────────────────────────────
 // Mind State

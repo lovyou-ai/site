@@ -336,6 +336,59 @@ func TestUpdateAndDeleteNode(t *testing.T) {
 	}
 }
 
+func TestDependencies(t *testing.T) {
+	_, store := testDB(t)
+	ctx := context.Background()
+
+	space, err := store.CreateSpace(ctx, "test-deps", "Test Deps", "", "owner-1", "project", "public")
+	if err != nil {
+		t.Fatalf("create space: %v", err)
+	}
+	t.Cleanup(func() { store.DeleteSpace(ctx, space.ID) })
+
+	taskA, _ := store.CreateNode(ctx, CreateNodeParams{
+		SpaceID: space.ID, Kind: KindTask, Title: "Task A", Author: "tester", AuthorID: "tester-id",
+	})
+	taskB, _ := store.CreateNode(ctx, CreateNodeParams{
+		SpaceID: space.ID, Kind: KindTask, Title: "Task B", Author: "tester", AuthorID: "tester-id",
+	})
+
+	// B depends on A.
+	if err := store.AddDependency(ctx, taskB.ID, taskA.ID); err != nil {
+		t.Fatalf("add dependency: %v", err)
+	}
+
+	// B should have 1 blocker (A is not done).
+	b, _ := store.GetNode(ctx, taskB.ID)
+	if b.BlockerCount != 1 {
+		t.Errorf("blocker_count = %d, want 1", b.BlockerCount)
+	}
+
+	// List blockers for B.
+	blockers, err := store.ListBlockers(ctx, taskB.ID)
+	if err != nil {
+		t.Fatalf("list blockers: %v", err)
+	}
+	if len(blockers) != 1 {
+		t.Fatalf("got %d blockers, want 1", len(blockers))
+	}
+	if blockers[0].Title != "Task A" {
+		t.Errorf("blocker title = %q, want %q", blockers[0].Title, "Task A")
+	}
+
+	// Complete A — B should have 0 blockers.
+	store.UpdateNodeState(ctx, taskA.ID, StateDone)
+	b, _ = store.GetNode(ctx, taskB.ID)
+	if b.BlockerCount != 0 {
+		t.Errorf("after completing A, blocker_count = %d, want 0", b.BlockerCount)
+	}
+
+	// Duplicate dependency should be ignored.
+	if err := store.AddDependency(ctx, taskB.ID, taskA.ID); err != nil {
+		t.Fatalf("duplicate dependency should not error: %v", err)
+	}
+}
+
 func TestPublicSpaces(t *testing.T) {
 	_, store := testDB(t)
 	ctx := context.Background()

@@ -1068,6 +1068,26 @@ func (h *Handlers) handleOp(w http.ResponseWriter, r *http.Request) {
 		}
 		http.Redirect(w, r, fmt.Sprintf("/app/%s/conversation/%s", space.Slug, node.ID), http.StatusSeeOther)
 
+	case "depend":
+		nodeID := r.FormValue("node_id")
+		dependsOn := r.FormValue("depends_on")
+		if nodeID == "" || dependsOn == "" {
+			http.Error(w, "node_id and depends_on required", http.StatusBadRequest)
+			return
+		}
+		if err := h.store.AddDependency(ctx, nodeID, dependsOn); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		h.store.RecordOp(ctx, space.ID, nodeID, actor, actorID, "depend", nil)
+
+		if wantsJSON(r) {
+			node, _ := h.store.GetNode(ctx, nodeID)
+			writeJSON(w, http.StatusOK, map[string]any{"node": node, "op": "depend"})
+			return
+		}
+		http.Redirect(w, r, fmt.Sprintf("/app/%s/node/%s", space.Slug, nodeID), http.StatusSeeOther)
+
 	default:
 		http.Error(w, fmt.Sprintf("unknown op: %s", op), http.StatusBadRequest)
 	}
