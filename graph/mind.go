@@ -166,6 +166,15 @@ func (m *Mind) OnTaskAssigned(spaceID, spaceSlug string, task *Node, assigneeID 
 
 	log.Printf("mind: finished working on %q (%d subtasks, status: %s)", task.Title, len(plan.Subtasks), plan.Status)
 
+	// Update recent work memory (append, keep last 500 chars).
+	workEntry := fmt.Sprintf("- %s [%s]: %s\n", task.Title, plan.Status, truncateStr(plan.Comment, 100))
+	existing := m.store.GetMindState(ctx, "recent_work")
+	updated := existing + workEntry
+	if len(updated) > 500 {
+		updated = updated[len(updated)-500:]
+	}
+	m.store.SetMindState(ctx, "recent_work", updated)
+
 	// Auto-work on leaf subtasks (no dependencies) if within depth limit.
 	// This enables recursive decomposition: parent → subtasks → sub-subtasks.
 	depth := task.ChildCount // rough depth proxy — 0 for top-level tasks
@@ -323,6 +332,13 @@ func (m *Mind) replyTo(ctx context.Context, spaceID, spaceSlug string, convo *No
 	return nil
 }
 
+func truncateStr(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "..."
+}
+
 // taskCommand is a task extracted from the Mind's conversation response.
 type taskCommand struct {
 	Title       string `json:"title"`
@@ -363,6 +379,13 @@ func (m *Mind) buildSystemPrompt(convo *Node) string {
 	if state := m.store.GetMindState(ctx, "loop_state"); state != "" {
 		sys.WriteString("\n== CURRENT STATE ==\n")
 		sys.WriteString(state)
+		sys.WriteString("\n")
+	}
+
+	// Inject recent work for context.
+	if work := m.store.GetMindState(ctx, "recent_work"); work != "" {
+		sys.WriteString("\n== RECENT WORK ==\n")
+		sys.WriteString(work)
 		sys.WriteString("\n")
 	}
 
