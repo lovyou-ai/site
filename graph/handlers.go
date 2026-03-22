@@ -31,6 +31,7 @@ type ViewAPIKey struct {
 // Handlers serves the unified product HTTP endpoints.
 type Handlers struct {
 	store     *Store
+	mind      *Mind // optional — triggers auto-reply on conversation messages
 	readWrap  func(http.HandlerFunc) http.Handler // optional auth (reads)
 	writeWrap func(http.HandlerFunc) http.Handler // required auth (writes)
 }
@@ -47,6 +48,9 @@ func NewHandlers(store *Store, readWrap, writeWrap func(http.HandlerFunc) http.H
 	}
 	return &Handlers{store: store, readWrap: readWrap, writeWrap: writeWrap}
 }
+
+// SetMind enables auto-reply on conversation messages.
+func (h *Handlers) SetMind(m *Mind) { h.mind = m }
 
 // Register adds all /app routes to the mux.
 func (h *Handlers) Register(mux *http.ServeMux) {
@@ -867,6 +871,13 @@ func (h *Handlers) handleOp(w http.ResponseWriter, r *http.Request) {
 		}
 		h.store.RecordOp(ctx, space.ID, node.ID, actor, "respond", nil)
 
+		// Trigger Mind auto-reply if a non-agent messaged in a conversation.
+		if h.mind != nil && actorKind != "agent" {
+			if parent, _ := h.store.GetNode(ctx, parentID); parent != nil && parent.Kind == KindConversation {
+				go h.mind.OnMessage(space.ID, space.Slug, parent, actor)
+			}
+		}
+
 		if wantsJSON(r) {
 			writeJSON(w, http.StatusCreated, map[string]any{"node": node, "op": "respond"})
 			return
@@ -1000,6 +1011,11 @@ func (h *Handlers) handleOp(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.store.RecordOp(ctx, space.ID, node.ID, actor, "converse", nil)
+
+		// Trigger Mind if a human created a conversation with an agent.
+		if h.mind != nil && actorKind != "agent" {
+			go h.mind.OnMessage(space.ID, space.Slug, node, actor)
+		}
 
 		if wantsJSON(r) {
 			writeJSON(w, http.StatusCreated, map[string]any{"node": node, "op": "converse"})

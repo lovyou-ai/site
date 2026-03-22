@@ -10,14 +10,12 @@ import (
 	"time"
 )
 
-// Mind polls for unreplied agent conversations and responds via Claude.
-// It runs as a background goroutine in the site server.
+// Mind responds to conversation messages via Claude.
+// Event-driven: triggered by handlers when a human messages in an agent conversation.
 type Mind struct {
-	db        *sql.DB
-	store     *Store
-	token     string // Claude OAuth token (sk-ant-oat01-...)
-	pollEvery time.Duration
-	maxAge    time.Duration // don't reply to messages older than this
+	db           *sql.DB
+	store        *Store
+	token        string        // Claude OAuth token
 	replyTimeout time.Duration // timeout for Claude CLI calls
 }
 
@@ -27,8 +25,6 @@ func NewMind(db *sql.DB, store *Store, claudeToken string) *Mind {
 		db:           db,
 		store:        store,
 		token:        claudeToken,
-		pollEvery:    10 * time.Second,
-		maxAge:       5 * time.Minute,
 		replyTimeout: 2 * time.Minute,
 	}
 }
@@ -51,162 +47,85 @@ You appear with a violet agent badge.
 - Match the energy and register of the conversation. Strategic when strategic, casual when casual.
 `
 
-// unrepliedConversation is a conversation where an agent participant hasn't replied
-// to the latest message.
-type unrepliedConversation struct {
-	ConversationID string
-	SpaceID        string
-	SpaceSlug      string
-	Title          string
-	Body           string
-	Author         string
-	AgentName      string
-	LastMessageAt  time.Time // when the most recent message was sent
-}
+// OnMessage is called by handlers when a message arrives in a conversation.
+// It checks if an agent should reply and does so asynchronously.
+// Safe to call from a goroutine.
+func (m *Mind) OnMessage(spaceID, spaceSlug string, convo *Node, sender string) {
+	// Find agent participants.
+	agentName, err := m.findAgentParticipant(convo.Tags)
+	if err != nil || agentName == "" {
+		return // no agent in this conversation
+	}
 
-// Run starts the polling loop. Blocks until ctx is cancelled.
-func (m *Mind) Run(ctx context.Context) {
-	log.Println("mind: started (polling every", m.pollEvery, ")")
-
-	// Initial delay to let the server finish starting.
-	select {
-	case <-time.After(5 * time.Second):
-	case <-ctx.Done():
+	// Don't reply to the agent's own messages.
+	if strings.EqualFold(sender, agentName) {
 		return
 	}
 
-	ticker := time.NewTicker(m.pollEvery)
-	defer ticker.Stop()
+	log.Printf("mind: %s messaged in %q, replying as %s", sender, convo.Title, agentName)
 
-	for {
-		select {
-		case <-ctx.Done():
-			log.Println("mind: stopped")
-			return
-		case <-ticker.C:
-			m.poll(ctx)
-		}
+	ctx, cancel := context.WithTimeout(context.Background(), m.replyTimeout)
+	defer cancel()
+
+	if err := m.replyTo(ctx, spaceID, spaceSlug, convo, agentName); err != nil {
+		log.Printf("mind: reply to %q: %v", convo.Title, err)
 	}
 }
 
-func (m *Mind) poll(ctx context.Context) {
-	convos, err := m.findUnreplied(ctx)
+// findAgentParticipant returns the name of the first agent in the participant list.
+func (m *Mind) findAgentParticipant(tags []string) (string, error) {
+	if len(tags) == 0 {
+		return "", nil
+	}
+	var name sql.NullString
+	err := m.db.QueryRow(
+		`SELECT name FROM users WHERE name = ANY($1) AND kind = 'agent' LIMIT 1`,
+		"{"+strings.Join(tags, ",")+"}", // Postgres array literal
+	).Scan(&name)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
 	if err != nil {
-		log.Printf("mind: find unreplied: %v", err)
-		return
+		return "", err
 	}
-
-	// Process one conversation at a time to avoid flooding.
-	for _, convo := range convos {
-		// Staleness guard: skip messages older than maxAge.
-		if time.Since(convo.LastMessageAt) > m.maxAge {
-			log.Printf("mind: skipping %q (last message %s ago, max %s)",
-				convo.Title, time.Since(convo.LastMessageAt).Round(time.Second), m.maxAge)
-			continue
-		}
-
-		if err := m.replyTo(ctx, convo); err != nil {
-			log.Printf("mind: reply to %q: %v", convo.Title, err)
-			// Don't process more conversations after a failure — back off.
-			return
-		}
-	}
+	return name.String, nil
 }
 
-// findUnreplied returns conversations where an agent is a participant and the
-// most recent message (or the conversation itself if no messages) is not from
-// that agent.
-func (m *Mind) findUnreplied(ctx context.Context) ([]unrepliedConversation, error) {
-	rows, err := m.db.QueryContext(ctx, `
-		SELECT c.id, c.space_id, s.slug, c.title, c.body, c.author, u.name,
-		       COALESCE(
-		           (SELECT MAX(m.created_at) FROM nodes m WHERE m.parent_id = c.id),
-		           c.created_at
-		       ) AS last_message_at
-		FROM nodes c
-		JOIN users u ON u.name = ANY(c.tags) AND u.kind = 'agent'
-		JOIN spaces s ON s.id = c.space_id
-		WHERE c.kind = 'conversation'
-		  AND NOT EXISTS (
-		      -- Agent already sent the most recent message
-		      SELECT 1 FROM nodes m
-		      WHERE m.parent_id = c.id
-		        AND m.author = u.name
-		        AND NOT EXISTS (
-		            SELECT 1 FROM nodes m2
-		            WHERE m2.parent_id = c.id
-		              AND m2.created_at > m.created_at
-		        )
-		  )
-		  -- Exclude conversations with zero messages that were created by the agent
-		  AND NOT (
-		      c.author = u.name
-		      AND NOT EXISTS (SELECT 1 FROM nodes m3 WHERE m3.parent_id = c.id)
-		  )
-		ORDER BY last_message_at DESC
-	`)
-	if err != nil {
-		return nil, fmt.Errorf("query: %w", err)
-	}
-	defer rows.Close()
-
-	var result []unrepliedConversation
-	for rows.Next() {
-		var c unrepliedConversation
-		if err := rows.Scan(&c.ConversationID, &c.SpaceID, &c.SpaceSlug, &c.Title, &c.Body, &c.Author, &c.AgentName, &c.LastMessageAt); err != nil {
-			return nil, fmt.Errorf("scan: %w", err)
-		}
-		result = append(result, c)
-	}
-	return result, rows.Err()
-}
-
-func (m *Mind) replyTo(ctx context.Context, convo unrepliedConversation) error {
-	// Fetch messages.
+func (m *Mind) replyTo(ctx context.Context, spaceID, spaceSlug string, convo *Node, agentName string) error {
 	messages, err := m.store.ListNodes(ctx, ListNodesParams{
-		SpaceID:  convo.SpaceID,
-		ParentID: convo.ConversationID,
+		SpaceID:  spaceID,
+		ParentID: convo.ID,
 	})
 	if err != nil {
 		return fmt.Errorf("list messages: %w", err)
 	}
 
-	log.Printf("mind: replying to %q (%d messages) as %s", convo.Title, len(messages), convo.AgentName)
-
-	// Build Claude prompt.
 	systemPrompt := m.buildSystemPrompt(convo)
-	claudeMessages := m.buildMessages(convo, messages)
+	claudeMessages := m.buildMessages(convo, messages, agentName)
 
-	// Call Claude with a timeout.
-	replyCtx, cancel := context.WithTimeout(ctx, m.replyTimeout)
-	defer cancel()
-
-	response, err := m.callClaude(replyCtx, systemPrompt, claudeMessages)
+	response, err := m.callClaude(ctx, systemPrompt, claudeMessages)
 	if err != nil {
 		return fmt.Errorf("call claude: %w", err)
 	}
 
-	// Insert response as a comment node.
 	node, err := m.store.CreateNode(ctx, CreateNodeParams{
-		SpaceID:    convo.SpaceID,
-		ParentID:   convo.ConversationID,
+		SpaceID:    spaceID,
+		ParentID:   convo.ID,
 		Kind:       KindComment,
 		Body:       response,
-		Author:     convo.AgentName,
+		Author:     agentName,
 		AuthorKind: "agent",
 	})
 	if err != nil {
 		return fmt.Errorf("create node: %w", err)
 	}
 
-	// Record the op.
-	m.store.RecordOp(ctx, convo.SpaceID, node.ID, convo.AgentName, "respond", nil)
-
+	m.store.RecordOp(ctx, spaceID, node.ID, agentName, "respond", nil)
 	log.Printf("mind: replied to %q (node %s)", convo.Title, node.ID)
 	return nil
 }
 
-func (m *Mind) buildSystemPrompt(convo unrepliedConversation) string {
+func (m *Mind) buildSystemPrompt(convo *Node) string {
 	var sys strings.Builder
 	sys.WriteString(mindSoul)
 	sys.WriteString("\n== CONVERSATION ==\n")
@@ -218,23 +137,22 @@ func (m *Mind) buildSystemPrompt(convo unrepliedConversation) string {
 }
 
 type claudeMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role    string
+	Content string
 }
 
-func (m *Mind) buildMessages(convo unrepliedConversation, messages []Node) []claudeMessage {
+func (m *Mind) buildMessages(convo *Node, messages []Node, agentName string) []claudeMessage {
 	var result []claudeMessage
 
 	for _, msg := range messages {
 		text := fmt.Sprintf("[%s]: %s", msg.Author, msg.Body)
-		if strings.EqualFold(msg.Author, convo.AgentName) {
+		if strings.EqualFold(msg.Author, agentName) {
 			result = append(result, claudeMessage{Role: "assistant", Content: text})
 		} else {
 			result = append(result, claudeMessage{Role: "user", Content: text})
 		}
 	}
 
-	// If no messages yet, use the conversation body/title as the initial prompt.
 	if len(result) == 0 {
 		prompt := convo.Body
 		if prompt == "" {
@@ -246,7 +164,6 @@ func (m *Mind) buildMessages(convo unrepliedConversation, messages []Node) []cla
 		})
 	}
 
-	// Ensure last message is from user (Claude requires this).
 	if len(result) > 0 && result[len(result)-1].Role == "assistant" {
 		result = append(result, claudeMessage{
 			Role:    "user",
@@ -257,10 +174,7 @@ func (m *Mind) buildMessages(convo unrepliedConversation, messages []Node) []cla
 	return result
 }
 
-// callClaude invokes Claude via the Claude Code CLI.
-// Uses the OAuth token (CLAUDE_CODE_OAUTH_TOKEN env var) for fixed-cost Max plan billing.
 func (m *Mind) callClaude(ctx context.Context, systemPrompt string, messages []claudeMessage) (string, error) {
-	// Build the prompt: system prompt + conversation history.
 	var prompt strings.Builder
 	prompt.WriteString(systemPrompt)
 	prompt.WriteString("\n== MESSAGES ==\n")
@@ -289,6 +203,5 @@ func (m *Mind) callClaude(ctx context.Context, systemPrompt string, messages []c
 	if text == "" {
 		return "", fmt.Errorf("empty response from Claude CLI")
 	}
-
 	return text, nil
 }
