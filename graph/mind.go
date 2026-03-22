@@ -97,7 +97,7 @@ func (m *Mind) OnTaskAssigned(spaceID, spaceSlug string, task *Node, assigneeID 
 	systemPrompt := m.buildTaskPrompt(task)
 	messages := []claudeMessage{{
 		Role: "user",
-		Content: fmt.Sprintf("Task assigned to you:\nTitle: %s\nDescription: %s\nPriority: %s\n\nRespond with a JSON object containing your work plan. Format:\n```json\n{\n  \"comment\": \"Your acknowledgment and approach (markdown)\",\n  \"subtasks\": [\"subtask title 1\", \"subtask title 2\"],\n  \"status\": \"active\"\n}\n```\n\nIf the task is simple enough to complete immediately, set status to \"done\" and put your deliverable in the comment. If it needs decomposition, create subtasks and set status to \"active\".",
+		Content: fmt.Sprintf("Task assigned to you:\nTitle: %s\nDescription: %s\nPriority: %s\n\nRespond with a JSON object containing your work plan. Format:\n```json\n{\n  \"comment\": \"Your acknowledgment and approach (markdown)\",\n  \"subtasks\": [\n    {\"title\": \"first thing\"},\n    {\"title\": \"second thing\", \"depends_on\": [0]}\n  ],\n  \"status\": \"active\"\n}\n```\n\nSubtasks can declare dependencies using indices into the array (0-based). If the task is simple enough to complete immediately, set status to \"done\", put your deliverable in the comment, and use an empty subtasks array.",
 			task.Title, task.Body, task.Priority),
 	}}
 
@@ -126,20 +126,30 @@ func (m *Mind) OnTaskAssigned(spaceID, spaceSlug string, task *Node, assigneeID 
 		}
 	}
 
-	// Create subtasks.
-	for _, title := range plan.Subtasks {
+	// Create subtasks and wire up dependencies.
+	subtaskIDs := make([]string, len(plan.Subtasks))
+	for i, item := range plan.Subtasks {
 		node, err := m.store.CreateNode(ctx, CreateNodeParams{
 			SpaceID:    spaceID,
 			ParentID:   task.ID,
 			Kind:       KindTask,
-			Title:      title,
+			Title:      item.Title,
 			Author:     agentName,
 			AuthorID:   assigneeID,
 			AuthorKind: "agent",
 		})
 		if err == nil {
+			subtaskIDs[i] = node.ID
 			m.store.RecordOp(ctx, spaceID, node.ID, agentName, assigneeID, "decompose", nil)
-			log.Printf("mind: created subtask %q", title)
+			log.Printf("mind: created subtask %q", item.Title)
+		}
+	}
+	// Wire up dependencies between subtasks.
+	for i, item := range plan.Subtasks {
+		for _, depIdx := range item.DependsOn {
+			if depIdx >= 0 && depIdx < len(subtaskIDs) && subtaskIDs[i] != "" && subtaskIDs[depIdx] != "" {
+				m.store.AddDependency(ctx, subtaskIDs[i], subtaskIDs[depIdx])
+			}
 		}
 	}
 
@@ -154,9 +164,15 @@ func (m *Mind) OnTaskAssigned(spaceID, spaceSlug string, task *Node, assigneeID 
 
 // workPlan is the structured output from the Mind when working on a task.
 type workPlan struct {
-	Comment  string   `json:"comment"`
-	Subtasks []string `json:"subtasks"`
-	Status   string   `json:"status"` // "active" or "done"
+	Comment  string       `json:"comment"`
+	Subtasks []workItem   `json:"subtasks"`
+	Status   string       `json:"status"` // "active" or "done"
+}
+
+// workItem is a subtask in a work plan, optionally with dependencies.
+type workItem struct {
+	Title     string `json:"title"`
+	DependsOn []int  `json:"depends_on,omitempty"` // indices into the subtasks array
 }
 
 // parseWorkPlan extracts a JSON work plan from the Mind's response.
