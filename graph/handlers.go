@@ -487,7 +487,7 @@ func (h *Handlers) handleConversations(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if wantsJSON(r) {
-		writeJSON(w, http.StatusOK, map[string]any{"space": space, "conversations": convos})
+		writeJSON(w, http.StatusOK, map[string]any{"space": space, "conversations": convos, "me": actor})
 		return
 	}
 
