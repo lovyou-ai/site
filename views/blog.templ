@@ -8,6 +8,7 @@ type Post struct {
 	Summary string
 	Date    time.Time
 	Body    string
+	Order   int // post number from filename, used for sorting
 }
 
 // PostNav holds optional prev/next links for a blog post.

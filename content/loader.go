@@ -52,7 +52,7 @@ func LoadPosts() ([]views.Post, error) {
 	}
 
 	sort.Slice(posts, func(i, j int) bool {
-		return posts[i].Date.Before(posts[j].Date)
+		return posts[i].Order < posts[j].Order
 	})
 
 	return posts, nil
@@ -106,29 +106,45 @@ func parsePost(md goldmark.Markdown, filename string, raw []byte) (views.Post, e
 		return views.Post{}, fmt.Errorf("convert markdown: %w", err)
 	}
 
+	// Post number from filename for stable ordering.
+	order := 0
+	if nm := postNum.FindStringSubmatch(filename); nm != nil {
+		order, _ = strconv.Atoi(nm[1])
+	}
+
 	return views.Post{
 		Slug:    slug,
 		Title:   title,
 		Summary: summary,
 		Date:    date,
 		Body:    buf.String(),
+		Order:   order,
 	}, nil
 }
 
-// findBodyStart skips past the title, subtitle, author, and first --- separator.
+// findBodyStart skips past the title, subtitle, author, and --- separator(s).
+// Only searches the first 15 lines for --- separators so that section dividers
+// within the body content are not mistaken for header delimiters.
 func findBodyStart(lines []string) int {
-	pastFirstHR := false
-	for i, l := range lines {
-		l = strings.TrimSpace(l)
-		if l == "---" {
-			if pastFirstHR {
-				// Second --- means start of body after it
+	limit := 15
+	if limit > len(lines) {
+		limit = len(lines)
+	}
+	firstHR := -1
+	for i := 0; i < limit; i++ {
+		if strings.TrimSpace(lines[i]) == "---" {
+			if firstHR >= 0 {
+				// Second --- in header area — body starts after it.
 				return i + 1
 			}
-			pastFirstHR = true
+			firstHR = i
 		}
 	}
-	// No separator found — start after title
+	if firstHR >= 0 {
+		// Single --- in header area — body starts after it.
+		return firstHR + 1
+	}
+	// No separator found — start after title.
 	for i, l := range lines {
 		if strings.HasPrefix(l, "# ") {
 			return i + 1

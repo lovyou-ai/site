@@ -2,3 +2,4 @@
 /site.exe
 *.exe~
 static/css/output.css
+.env

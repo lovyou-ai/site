@@ -127,7 +127,9 @@ func (a *Auth) handleLogin(w http.ResponseWriter, r *http.Request) {
 		Secure:   a.secure,
 		SameSite: http.SameSiteLaxMode,
 	})
-	http.Redirect(w, r, a.oauth.AuthCodeURL(state), http.StatusSeeOther)
+	authURL := a.oauth.AuthCodeURL(state)
+	log.Printf("auth: login redirect to %s", authURL)
+	http.Redirect(w, r, authURL, http.StatusSeeOther)
 }
 
 func (a *Auth) handleCallback(w http.ResponseWriter, r *http.Request) {
