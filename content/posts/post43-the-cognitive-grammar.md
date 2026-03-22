@@ -181,28 +181,28 @@ The nine operations compose freely — any sequence of operations is valid. Most
 Every intellectual practice you've ever performed has a name in this grammar. Most of them are compositions you already do — you just didn't have the vocabulary.
 
 ```
-What you did              Common name          Grammar
-─────────────────────────────────────────────────────────────────────
-Checked your sources      Fact-checking        Trace
-Made a plan first         Planning             Map + Bounded Explore
-Noticed you forgot something  "Wait, what about..."  Need
-Wrote down how you did it Documentation        Formalize
-Looked at the big picture Big-picture thinking  Zoom(out)
-Tried it to see what happens  Experimentation  Hypothesize
-Read everything first     Due diligence        Exhaustive Cover + Derive
-Compared work against spec  Testing            Audit
-Got a second opinion      Consultation         Invoking Blind
-Went down a rabbit hole   Distraction          Unbounded Explore
-Fixed a bug               Debugging            Trace + Audit + Revise
-Explained it to a rubber duck  Rubber-ducking  Formalize
-Rewrote a bad paragraph   Editing              Revise (Need + Derive)
-Asked "what am I not seeing?"  Self-awareness  Blind (usually fails alone)
-Outlined before writing   Structuring          Map
-Listed failure modes      Risk assessment      Catalog
-Asked "what should I know?"  Onboarding        Orient (Map + Zoom)
-Designed an experiment    Experimental design   Hypothesize + Map + Audit
-Reviewed a pull request   Code review          Validate (Trace + Audit)
-—                         —                    Calibrate (no common practice)
+What you did                    Common name             Grammar
+────────────────────────────────────────────────────────────────────────────
+Checked your sources            Fact-checking           Trace
+Made a plan first               Planning                Map + Bounded Explore
+Noticed you forgot something    "Wait, what about..."   Need
+Wrote down how you did it       Documentation           Formalize
+Looked at the big picture       Big-picture thinking    Zoom(out)
+Tried it to see what happens    Experimentation         Hypothesize
+Read everything first           Due diligence           Exhaustive Cover + Derive
+Compared work against spec      Testing                 Audit
+Got a second opinion            Consultation            Invoking Blind
+Went down a rabbit hole         Distraction             Unbounded Explore
+Fixed a bug                     Debugging               Trace + Audit + Revise
+Explained it to a rubber duck   Rubber-ducking          Formalize
+Rewrote a bad paragraph         Editing                 Revise (Need + Derive)
+Asked "what am I not seeing?"   Self-awareness          Blind (usually fails alone)
+Outlined before writing         Structuring             Map
+Listed failure modes            Risk assessment         Catalog
+Asked "what should I know?"     Onboarding              Orient (Map + Zoom)
+Designed an experiment          Experimental design     Hypothesize + Map + Audit
+Reviewed a pull request         Code review             Validate (Trace + Audit)
+—                               —                       Calibrate (no common practice)
 ```
 
 The last row is the point. Calibrate — Cover + Blind + Zoom — has no common name because almost nobody does it. Checking your coverage at multiple scales while actively seeking unknown unknowns is the most expensive cognitive operation and the most neglected. The systems that skip it are the ones that fail catastrophically. Space shuttle. Financial crisis. Production outage at 3am. The grammar doesn't just name what you already do. It shows what's missing from standard practice.
