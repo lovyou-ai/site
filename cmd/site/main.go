@@ -249,7 +249,7 @@ func main() {
 
 	addr := ":" + p
 	log.Printf("lovyou.ai listening on %s", addr)
-	if err := http.ListenAndServe(addr, noCache(mux)); err != nil {
+	if err := http.ListenAndServe(addr, canonicalHost(noCache(mux))); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -257,6 +257,19 @@ func main() {
 // ────────────────────────────────────────────────────────────────────
 // Middleware
 // ────────────────────────────────────────────────────────────────────
+
+// canonicalHost redirects non-canonical hostnames to lovyou.ai.
+func canonicalHost(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		host := r.Host
+		if host != "" && host != "lovyou.ai" && host != "localhost"+r.URL.Port() && !strings.HasPrefix(host, "localhost:") && !strings.HasPrefix(host, "127.0.0.1") {
+			target := "https://lovyou.ai" + r.URL.RequestURI()
+			http.Redirect(w, r, target, http.StatusMovedPermanently)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
 
 func noCache(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
