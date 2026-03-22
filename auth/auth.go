@@ -296,7 +296,18 @@ func (a *Auth) handleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return the raw key as JSON (only time it's ever shown).
+	// HTMX request — return HTML fragment showing the raw key.
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprintf(w, `<div class="p-4 bg-elevated rounded-lg border border-brand">
+<p class="text-sm font-medium text-brand mb-2">Key created! Save this — you won't see it again.</p>
+<code class="block text-sm bg-void rounded p-3 text-warm break-all select-all">%s</code>
+<p class="text-xs text-warm-muted mt-2">Use as: Authorization: Bearer %s</p>
+</div>`, rawKey, rawKey[:10]+"...")
+		return
+	}
+
+	// JSON response for API clients.
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
 		"key":  rawKey,
@@ -319,7 +330,7 @@ func (a *Auth) handleDeleteAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.Redirect(w, r, "/app", http.StatusSeeOther)
+	http.Redirect(w, r, "/app/keys", http.StatusSeeOther)
 }
 
 // ListAPIKeys returns all API keys for a user (metadata only, no raw keys).

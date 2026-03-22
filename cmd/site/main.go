@@ -158,6 +158,22 @@ func main() {
 				log.Fatalf("auth: %v", err)
 			}
 			authService.Register(mux)
+
+			// API key management page.
+			mux.Handle("GET /app/keys", authService.RequireAuth(func(w http.ResponseWriter, r *http.Request) {
+				user := auth.UserFromContext(r.Context())
+				keys, _ := authService.ListAPIKeys(r.Context(), user.ID)
+				var viewKeys []graph.ViewAPIKey
+				for _, k := range keys {
+					viewKeys = append(viewKeys, graph.ViewAPIKey{
+						ID:        k.ID,
+						Name:      k.Name,
+						CreatedAt: k.CreatedAt.Format("Jan 2, 2006"),
+					})
+				}
+				graph.APIKeysView(viewKeys, graph.ViewUser{Name: user.Name, Picture: user.Picture}).Render(r.Context(), w)
+			}))
+
 			writeWrap = authService.RequireAuth
 			readWrap = authService.OptionalAuth
 			log.Println("auth enabled (Google OAuth)")

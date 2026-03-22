@@ -19,6 +19,13 @@ type ViewUser struct {
 	Picture string
 }
 
+// ViewAPIKey holds API key info for templates.
+type ViewAPIKey struct {
+	ID        string
+	Name      string
+	CreatedAt string
+}
+
 // Handlers serves the unified product HTTP endpoints.
 type Handlers struct {
 	store     *Store
