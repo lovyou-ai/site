@@ -26,9 +26,16 @@ templ ReferenceIndex(layers []Layer, agentPrims []Primitive, grammars []RefPage)
 							<span class="text-sm font-mono text-gray-400">G</span>
 							<div>
 								<h3 class="text-lg font-semibold">Graph Grammar</h3>
-								<p class="text-sm text-gray-500">The universal vocabulary</p>
-								<p class="text-gray-600 text-sm mt-1">15 operations on the event graph. Emit, Respond, Derive, Consent, and 11 more. Every domain grammar is a composition of these.</p>
-								<p class="text-xs text-gray-400 mt-1">15 operations, 3 modifiers, 8 named functions</p>
+								<p class="text-sm text-gray-500">The universal vocabulary — 15 operations, 3 modifiers, 8 named functions</p>
+								<p class="text-gray-600 text-sm mt-2">
+									Social interactions are operations on a graph. Six semantic dimensions — causality,
+									content, temporality, visibility, direction, authorship — extend graph theory into the
+									social domain, producing 15 irreducible operations: Emit, Respond, Derive, Extend,
+									Retract, Annotate, Acknowledge, Propagate, Endorse, Subscribe, Channel, Delegate,
+									Consent, Sever, and Merge. Every domain grammar is a composition of these base operations.
+									Three modifiers (Transient, Nascent, Conditional) and eight named functions (Recommend,
+									Challenge, Curate, Collaborate, Forgive, Invite, Memorial, Transfer) complete the vocabulary.
+								</p>
 							</div>
 						</div>
 					</a>
@@ -37,9 +44,16 @@ templ ReferenceIndex(layers []Layer, agentPrims []Primitive, grammars []RefPage)
 							<span class="text-sm font-mono text-gray-400">1-13</span>
 							<div>
 								<h3 class="text-lg font-semibold">Layer Grammars</h3>
-								<p class="text-sm text-gray-500">Domain-specific compositions</p>
-								<p class="text-gray-600 text-sm mt-1">Each layer has its own grammar: Work, Market, Social, Justice, Build, Knowledge, Alignment, Identity, Bond, Belonging, Meaning, Evolution, Being.</p>
-								<p class="text-xs text-gray-400 mt-1">{ fmt.Sprintf("%d grammars", len(grammars)) }</p>
+								<p class="text-sm text-gray-500">{ fmt.Sprintf("%d domain-specific grammars", len(grammars)) }</p>
+								<p class="text-gray-600 text-sm mt-2">
+									Each layer above Foundation has its own grammar — a domain-specific composition of the
+									graph grammar's 15 base operations, with additional operations, modifiers, and named
+									functions tuned to that domain. Work grammar adds Intend, Decompose, and Complete for
+									task management. Market grammar adds Offer, Bid, and Escrow for exchange. Social grammar
+									adds Norm, Moderate, and Elect for governance. The same pattern continues through Justice,
+									Build, Knowledge, Alignment, Identity, Bond, Belonging, Meaning, Evolution, and Being — each
+									grammar extending the base vocabulary with the concepts its layer needs.
+								</p>
 							</div>
 						</div>
 					</a>
@@ -49,7 +63,11 @@ templ ReferenceIndex(layers []Layer, agentPrims []Primitive, grammars []RefPage)
 			<!-- Section 2: Ontology -->
 			<section>
 				<h2 class="text-xl font-semibold mb-1">Ontology</h2>
-				<p class="text-gray-500 text-sm mb-4">What exists. 201 primitives across 14 layers — each layer emerges from gaps in the one below.</p>
+				<p class="text-gray-500 text-sm mb-4">
+					What exists. 201 primitives across 14 layers. Each layer emerges from gaps in the one below —
+					something the lower layer can represent but cannot reason about. The framework is circular:
+					Layer 13 is presupposed by Layer 0.
+				</p>
 				<div class="space-y-3">
 					for _, layer := range layers {
 						<a href={ templ.SafeURL(fmt.Sprintf("/reference/layers/%d", layer.Number)) } class="block p-5 bg-white rounded-lg border border-gray-200 hover:border-brand hover:shadow-md transition-all">
@@ -60,9 +78,7 @@ templ ReferenceIndex(layers []Layer, agentPrims []Primitive, grammars []RefPage)
 									if layer.Transition != "" {
 										<p class="text-sm text-gray-500">{ layer.Transition }</p>
 									}
-									if layer.Gap != "" {
-										<p class="text-gray-600 text-sm mt-1">{ layer.Gap }</p>
-									}
+									<p class="text-gray-600 text-sm mt-2">{ layerDescription(layer.Number) }</p>
 									<p class="text-xs text-gray-400 mt-1">{ fmt.Sprintf("%d primitives", len(layer.Primitives)) }</p>
 								</div>
 							</div>
@@ -81,9 +97,16 @@ templ ReferenceIndex(layers []Layer, agentPrims []Primitive, grammars []RefPage)
 							<span class="text-sm font-mono text-gray-400">A</span>
 							<div>
 								<h3 class="text-lg font-semibold">Agent Primitives</h3>
-								<p class="text-sm text-gray-500">What an agent is and can do</p>
-								<p class="text-gray-600 text-sm mt-1">Structural, operational, relational, and modal primitives that define agents as participants in the graph.</p>
-								<p class="text-xs text-gray-400 mt-1">{ fmt.Sprintf("%d primitives", len(agentPrims)) }</p>
+								<p class="text-sm text-gray-500">{ fmt.Sprintf("%d primitives across 4 categories", len(agentPrims)) }</p>
+								<p class="text-gray-600 text-sm mt-2">
+									Agents are participants in the graph — humans and AI alike. 28 primitives define what
+									an agent is and can do, derived by dimensional analysis across direction, timing,
+									mutability, agency, and awareness. Structural primitives (Identity, Soul, Model, Memory,
+									Authority, Trust, Budget) define what an agent IS. Operational primitives (Observe, Evaluate,
+									Decide, Act, Delegate, Learn, Introspect) define what an agent DOES. Relational primitives
+									(Consent, Channel, Composition) define how agents CONNECT. Modal primitives (Attenuation)
+									define how agents CONSTRAIN themselves.
+								</p>
 							</div>
 						</div>
 					</a>
@@ -301,6 +324,40 @@ templ PrimitivePage(prim Primitive) {
 			}
 		</article>
 	}
+}
+
+func layerDescription(num int) string {
+	switch num {
+	case 0:
+		return "The irreducible computational foundations — 45 given primitives in 11 groups. Event graph, causality, identity, expectations, trust, confidence, instrumentation, query, integrity, deception detection, and system health. Layer 0 is a witness: it can observe, record, verify, and doubt, but it cannot act. Everything above is derived from gaps in this layer."
+	case 1:
+		return "Observer becomes participant. Layer 0 records events but cannot distinguish a passive logger from an agent that chose to act. Agency adds Volition (Value, Intent, Choice, Risk), Action (Act, Consequence, Capacity, Resource), and Communication (Signal, Reception, Acknowledgment, Commitment) — the 12 primitives that transform a witness into an actor."
+	case 2:
+		return "Individual becomes dyad. Agency models what one actor can do, but has no concept of mutual binding — \"both or neither.\" Exchange adds Common Ground (Term, Protocol, Offer, Acceptance), Mutual Binding (Agreement, Obligation, Fulfillment, Breach), and Value Transfer (Exchange, Accountability, Debt, Reciprocity)."
+	case 3:
+		return "Dyad becomes group. Exchange models pairs, but when a third actor joins, new phenomena emerge: voting, norms, reputation across a community. Society adds Collective Identity (Group, Membership, Role, Consent), Social Order (Norm, Reputation, Sanction, Authority), and Collective Agency (Property, Commons, Governance, Collective Act)."
+	case 4:
+		return "Informal becomes formal. Society has norms that emerge from behavior and consensus, but no codified rules, jurisdiction, or precedent. Legal adds Codification (Law, Right, Contract, Liability), Process (Due Process, Adjudication, Remedy, Precedent), and Sovereign Structure (Jurisdiction, Sovereignty, Legitimacy, Treaty)."
+	case 5:
+		return "Governing becomes building. Legal formalizes rules but cannot create new capabilities. Technology adds Investigation (Method, Measurement, Knowledge, Model), Creation (Tool, Technique, Invention, Abstraction), and Systems (Infrastructure, Standard, Efficiency, Automation)."
+	case 6:
+		return "Physical becomes symbolic. Technology creates tools but cannot represent abstract concepts independent of their physical substrate. Information adds Representation (Symbol, Language, Encoding, Record), Dynamics (Channel, Copy, Noise, Redundancy), and Transformation (Data, Computation, Algorithm, Entropy)."
+	case 7:
+		return "Is becomes ought. The first irreducible recognition: experience matters. No amount of computation can derive moral status from function. Ethics adds Moral Standing (Moral Status, Dignity, Autonomy, Flourishing), Moral Obligation (Duty, Harm, Care, Justice), and Moral Agency (Conscience, Virtue, Responsibility, Motive)."
+	case 8:
+		return "Doing becomes being. Ethics tells agents what they should do, but not who they are. Identity adds Self-Knowledge (Narrative, Self-Concept, Reflection, Memory), Self-Direction (Purpose, Aspiration, Authenticity, Expression), and Self-Becoming (Growth, Continuity, Integration, Crisis)."
+	case 9:
+		return "Self becomes self-with-other. Identity is individual, but some experiences only exist in relationship — intimacy, grief, forgiveness. Relationship adds Connection (Bond, Attachment, Recognition, Intimacy), Relational Dynamics (Attunement, Rupture, Repair, Loyalty), and Relational Identity (Mutual Constitution, Relational Obligation, Grief, Forgiveness)."
+	case 10:
+		return "Relationship becomes belonging. Dyadic bonds don't explain what happens when many relationships form a living community. Community adds Shared Meaning (Culture, Shared Narrative, Ethos, Sacred), Living Practice (Tradition, Ritual, Practice, Place), and Communal Experience (Belonging, Solidarity, Voice, Welcome)."
+	case 11:
+		return "Living culture becomes seeing culture. Community lives within culture but cannot step outside it. Culture adds Cultural Awareness (Reflexivity, Encounter, Translation, Pluralism), Cultural Creation (Creativity, Aesthetic, Interpretation, Dialogue), and Cultural Dynamics (Syncretism, Critique, Hegemony, Cultural Evolution). Three independent evaluative axes: practical (useful?), moral (right?), aesthetic (beautiful?)."
+	case 12:
+		return "Content becomes architecture. The second irreducible recognition: consciousness exists. No functional description captures subjective experience. Emergence adds Principles of Complexity (Emergence, Self-Organization, Feedback, Complexity), Limits and Self-Reference (Consciousness, Recursion, Paradox, Incompleteness), and Dynamic Architecture (Phase Transition, Downward Causation, Autopoiesis, Co-Evolution)."
+	case 13:
+		return "Everything becomes the fact of everything. The third irreducible recognition: being itself. Why is there something rather than nothing? Existence adds The Given (Being, Nothingness, Finitude, Contingency), The Response (Wonder, Acceptance, Presence, Gratitude), and The Horizon (Mystery, Transcendence, Groundlessness, Return). The framework is circular — Layer 13 is presupposed by Layer 0."
+	}
+	return ""
 }
 
 func specLabel(p Primitive, field string) string {
