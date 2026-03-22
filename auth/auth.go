@@ -22,8 +22,9 @@ import (
 type APIKey struct {
 	ID        string
 	Name      string
-	AgentName string // If non-empty, this key authenticates as this agent identity.
-	UserID    string
+	UserID    string    // Human sponsor who created/manages this key.
+	AgentID   string    // If non-empty, this key authenticates as this agent user.
+	AgentName string    // Display name of the agent (denormalized for listing).
 	CreatedAt time.Time
 }
 
@@ -96,6 +97,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
     key_hash TEXT UNIQUE NOT NULL,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     agent_name TEXT NOT NULL DEFAULT '',
+    agent_id TEXT REFERENCES users(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 `)
@@ -103,10 +105,18 @@ CREATE TABLE IF NOT EXISTS api_keys (
 		return err
 	}
 
-	// Add agent_name column if it doesn't exist (migration for existing databases).
-	_, err = a.db.ExecContext(context.Background(), `
-		ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS agent_name TEXT NOT NULL DEFAULT ''`)
-	return err
+	// Migrations for existing databases.
+	migrations := []string{
+		`ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS agent_name TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS agent_id TEXT REFERENCES users(id) ON DELETE SET NULL`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'human'`,
+	}
+	for _, m := range migrations {
+		if _, err := a.db.ExecContext(context.Background(), m); err != nil {
+			return fmt.Errorf("migration: %w", err)
+		}
+	}
+	return nil
 }
 
 // Register adds auth routes to the mux.
@@ -346,7 +356,8 @@ func (a *Auth) handleDeleteAPIKey(w http.ResponseWriter, r *http.Request) {
 // ListAPIKeys returns all API keys for a user (metadata only, no raw keys).
 func (a *Auth) ListAPIKeys(ctx context.Context, userID string) ([]APIKey, error) {
 	rows, err := a.db.QueryContext(ctx,
-		`SELECT id, name, user_id, agent_name, created_at FROM api_keys WHERE user_id = $1 ORDER BY created_at`, userID)
+		`SELECT id, name, user_id, agent_name, COALESCE(agent_id, ''), created_at
+		 FROM api_keys WHERE user_id = $1 ORDER BY created_at`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("list api keys: %w", err)
 	}
@@ -355,7 +366,7 @@ func (a *Auth) ListAPIKeys(ctx context.Context, userID string) ([]APIKey, error)
 	var keys []APIKey
 	for rows.Next() {
 		var k APIKey
-		if err := rows.Scan(&k.ID, &k.Name, &k.UserID, &k.AgentName, &k.CreatedAt); err != nil {
+		if err := rows.Scan(&k.ID, &k.Name, &k.UserID, &k.AgentName, &k.AgentID, &k.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan api key: %w", err)
 		}
 		keys = append(keys, k)
@@ -378,6 +389,23 @@ func (a *Auth) upsertUser(ctx context.Context, googleID, email, name, picture st
 			picture = EXCLUDED.picture
 		RETURNING id, email, name, picture`,
 		newID(), googleID, email, name, picture,
+	).Scan(&u.ID, &u.Email, &u.Name, &u.Picture)
+	return &u, err
+}
+
+// ensureAgentUser creates or finds an agent user record.
+// Agents are real users with kind='agent' and a synthetic google_id.
+func (a *Auth) ensureAgentUser(ctx context.Context, agentName string) (*User, error) {
+	syntheticGoogleID := "agent:" + agentName
+	syntheticEmail := agentName + "@agent.lovyou.ai"
+
+	var u User
+	err := a.db.QueryRowContext(ctx, `
+		INSERT INTO users (id, google_id, email, name, kind)
+		VALUES ($1, $2, $3, $4, 'agent')
+		ON CONFLICT (google_id) DO UPDATE SET name = EXCLUDED.name
+		RETURNING id, email, name, picture`,
+		newID(), syntheticGoogleID, syntheticEmail, agentName,
 	).Scan(&u.ID, &u.Email, &u.Name, &u.Picture)
 	return &u, err
 }
@@ -435,14 +463,24 @@ func (a *Auth) userFromBearer(r *http.Request) *User {
 }
 
 // createAPIKey generates a new API key, stores its hash, returns the raw key.
+// If agentName is non-empty, creates a real agent user and links the key to it.
 func (a *Auth) createAPIKey(ctx context.Context, userID, name, agentName string) (string, error) {
 	rawKey := "lv_" + newID() + newID() // 64 hex chars + prefix
 	hash := hashKey(rawKey)
 	id := newID()
 
+	var agentID *string
+	if agentName != "" {
+		agent, err := a.ensureAgentUser(ctx, agentName)
+		if err != nil {
+			return "", fmt.Errorf("ensure agent user: %w", err)
+		}
+		agentID = &agent.ID
+	}
+
 	_, err := a.db.ExecContext(ctx,
-		`INSERT INTO api_keys (id, name, key_hash, user_id, agent_name) VALUES ($1, $2, $3, $4, $5)`,
-		id, name, hash, userID, agentName)
+		`INSERT INTO api_keys (id, name, key_hash, user_id, agent_name, agent_id) VALUES ($1, $2, $3, $4, $5, $6)`,
+		id, name, hash, userID, agentName, agentID)
 	if err != nil {
 		return "", fmt.Errorf("insert api key: %w", err)
 	}
@@ -450,24 +488,35 @@ func (a *Auth) createAPIKey(ctx context.Context, userID, name, agentName string)
 }
 
 // userByAPIKey looks up a user by raw API key (hashes it first).
-// If the key has an agent_name, it overrides the user's display name —
-// the key authenticates as the agent identity, not the human.
+// If the key has an agent_id, returns the agent user — the agent acts
+// under its own identity, not the human sponsor's.
 func (a *Auth) userByAPIKey(ctx context.Context, rawKey string) (*User, error) {
 	hash := hashKey(rawKey)
 	var u User
-	var agentName string
+	var agentID sql.NullString
 	err := a.db.QueryRowContext(ctx, `
-		SELECT u.id, u.email, u.name, u.picture, k.agent_name
+		SELECT u.id, u.email, u.name, u.picture, k.agent_id
 		FROM users u
 		JOIN api_keys k ON k.user_id = u.id
 		WHERE k.key_hash = $1`, hash,
-	).Scan(&u.ID, &u.Email, &u.Name, &u.Picture, &agentName)
+	).Scan(&u.ID, &u.Email, &u.Name, &u.Picture, &agentID)
 	if err != nil {
 		return nil, err
 	}
-	if agentName != "" {
-		u.Name = agentName
+
+	// If the key is linked to an agent, resolve to the agent's identity.
+	if agentID.Valid {
+		var agent User
+		err := a.db.QueryRowContext(ctx, `
+			SELECT id, email, name, picture FROM users WHERE id = $1`,
+			agentID.String,
+		).Scan(&agent.ID, &agent.Email, &agent.Name, &agent.Picture)
+		if err != nil {
+			return nil, fmt.Errorf("resolve agent user: %w", err)
+		}
+		return &agent, nil
 	}
+
 	return &u, nil
 }
 
