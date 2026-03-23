@@ -762,13 +762,19 @@ func (h *Handlers) handleOp(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "title required", http.StatusBadRequest)
 			return
 		}
+		assigneeName := strings.TrimSpace(r.FormValue("assignee"))
+		assigneeID := ""
+		if assigneeName != "" {
+			assigneeID = h.store.ResolveUserID(ctx, assigneeName)
+		}
 		node, err := h.store.CreateNode(ctx, CreateNodeParams{
 			SpaceID:    space.ID,
 			Kind:       KindTask,
 			Title:      title,
 			Body:       strings.TrimSpace(r.FormValue("description")),
 			Priority:   r.FormValue("priority"),
-			Assignee:   strings.TrimSpace(r.FormValue("assignee")),
+			Assignee:   assigneeName,
+			AssigneeID: assigneeID,
 			Author:     actor,
 			AuthorID:   actorID,
 			AuthorKind: actorKind,
@@ -780,11 +786,8 @@ func (h *Handlers) handleOp(w http.ResponseWriter, r *http.Request) {
 		h.store.RecordOp(ctx, space.ID, node.ID, actor, actorID, "intend", nil)
 
 		// Trigger Mind if task was created with an agent assignee.
-		if h.mind != nil && node.Assignee != "" {
-			assigneeID := h.store.ResolveUserID(ctx, node.Assignee)
-			if assigneeID != "" {
-				go h.mind.OnTaskAssigned(space.ID, space.Slug, node, assigneeID)
-			}
+		if h.mind != nil && assigneeID != "" {
+			go h.mind.OnTaskAssigned(space.ID, space.Slug, node, assigneeID)
 		}
 
 		if wantsJSON(r) {
@@ -965,9 +968,9 @@ func (h *Handlers) handleOp(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "node_id required", http.StatusBadRequest)
 			return
 		}
-		// Resolve assignee name to ID if possible.
+		// Resolve assignee name to ID.
 		assigneeID := h.store.ResolveUserID(ctx, assignee)
-		if err := h.store.UpdateNode(ctx, nodeID, nil, nil, nil, &assignee); err != nil {
+		if err := h.store.UpdateNode(ctx, nodeID, nil, nil, nil, &assignee, &assigneeID); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -993,7 +996,7 @@ func (h *Handlers) handleOp(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "node_id required", http.StatusBadRequest)
 			return
 		}
-		if err := h.store.UpdateNode(ctx, nodeID, nil, nil, nil, &actor); err != nil {
+		if err := h.store.UpdateNode(ctx, nodeID, nil, nil, nil, &actor, &actorID); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -1020,7 +1023,7 @@ func (h *Handlers) handleOp(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "node_id and priority required", http.StatusBadRequest)
 			return
 		}
-		if err := h.store.UpdateNode(ctx, nodeID, nil, nil, &priority, nil); err != nil {
+		if err := h.store.UpdateNode(ctx, nodeID, nil, nil, &priority, nil, nil); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -1235,12 +1238,15 @@ func (h *Handlers) handleNodeUpdate(w http.ResponseWriter, r *http.Request) {
 	if v := r.FormValue("priority"); v != "" {
 		priority = &v
 	}
+	var assigneeIDPtr *string
 	if r.Form != nil && r.Form.Has("assignee") {
 		v := r.FormValue("assignee")
 		assignee = &v
+		aid := h.store.ResolveUserID(r.Context(), v)
+		assigneeIDPtr = &aid
 	}
 
-	if err := h.store.UpdateNode(r.Context(), nodeID, title, body, priority, assignee); err != nil {
+	if err := h.store.UpdateNode(r.Context(), nodeID, title, body, priority, assignee, assigneeIDPtr); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			http.NotFound(w, r)
 			return

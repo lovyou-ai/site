@@ -318,7 +318,7 @@ func TestUpdateAndDeleteNode(t *testing.T) {
 
 	// Update fields.
 	newTitle := "Updated Title"
-	if err := store.UpdateNode(ctx, node.ID, &newTitle, nil, nil, nil); err != nil {
+	if err := store.UpdateNode(ctx, node.ID, &newTitle, nil, nil, nil, nil); err != nil {
 		t.Fatalf("update node: %v", err)
 	}
 	got, _ = store.GetNode(ctx, node.ID)

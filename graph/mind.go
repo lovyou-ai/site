@@ -315,6 +315,7 @@ func (m *Mind) replyTo(ctx context.Context, spaceID, spaceSlug string, convo *No
 			Body:       t.Description,
 			Priority:   t.Priority,
 			Assignee:   agentName,
+			AssigneeID: agentID,
 			Author:     agentName,
 			AuthorID:   agentID,
 			AuthorKind: "agent",
