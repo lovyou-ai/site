@@ -128,6 +128,10 @@ func main() {
 	// Discover page (public spaces) — registered after DB setup below.
 	var graphStore *graph.Store
 
+	// Auth middleware wrappers — initialized in the DB block, used by routes below.
+	noop := func(hf http.HandlerFunc) http.Handler { return hf }
+	readWrap, writeWrap := noop, noop
+
 	// Unified product with auth.
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn != "" {
@@ -141,7 +145,6 @@ func main() {
 		}
 
 		// Auth middleware: Google OAuth if configured, otherwise anonymous passthrough.
-		var readWrap, writeWrap func(http.HandlerFunc) http.Handler
 		clientID := os.Getenv("GOOGLE_CLIENT_ID")
 		clientSecret := os.Getenv("GOOGLE_CLIENT_SECRET")
 
@@ -267,7 +270,7 @@ func main() {
 	})
 
 	// User profiles — identity from action history (Layer 8).
-	mux.HandleFunc("GET /user/{name}", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("GET /user/{name}", readWrap(func(w http.ResponseWriter, r *http.Request) {
 		name := r.PathValue("name")
 		if graphStore == nil {
 			http.NotFound(w, r)
@@ -295,12 +298,54 @@ func main() {
 				SpaceName: spaceName, SpaceSlug: spaceSlug, CreatedAt: o.CreatedAt,
 			})
 		}
+		// Endorsement data.
+		endorsements := graphStore.CountEndorsements(r.Context(), u.ID)
+		endorsers, _ := graphStore.ListEndorsers(r.Context(), u.ID, 10)
+		viewer := auth.UserFromContext(r.Context())
+		viewerLoggedIn := viewer != nil && viewer.ID != "anonymous"
+		hasEndorsed := false
+		if viewerLoggedIn {
+			hasEndorsed = graphStore.HasEndorsed(r.Context(), viewer.ID, u.ID)
+		}
 		views.ProfilePage(views.UserProfile{
 			Name: u.Name, Kind: u.Kind,
 			TasksDone: u.TasksDone, OpCount: u.OpCount,
+			Endorsements: endorsements, Endorsers: endorsers,
+			HasEndorsed: hasEndorsed, ViewerLoggedIn: viewerLoggedIn,
 			RecentOps: recentOps,
 		}).Render(r.Context(), w)
-	})
+	}))
+
+	// Endorse/unendorse a user (Layer 9 — Relationship).
+	mux.Handle("POST /user/{name}/endorse", writeWrap(func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("name")
+		if graphStore == nil {
+			http.Error(w, "not available", http.StatusServiceUnavailable)
+			return
+		}
+		viewer := auth.UserFromContext(r.Context())
+		if viewer == nil {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		targetID := graphStore.ResolveUserID(r.Context(), name)
+		if targetID == "" {
+			http.NotFound(w, r)
+			return
+		}
+		// Can't endorse yourself.
+		if viewer.ID == targetID {
+			http.Redirect(w, r, "/user/"+name, http.StatusSeeOther)
+			return
+		}
+		action := r.FormValue("action")
+		if action == "unendorse" {
+			graphStore.Unendorse(r.Context(), viewer.ID, targetID)
+		} else {
+			graphStore.Endorse(r.Context(), viewer.ID, targetID)
+		}
+		http.Redirect(w, r, "/user/"+name, http.StatusSeeOther)
+	}))
 
 	// Global activity — transparent audit trail (Layer 7).
 	mux.HandleFunc("GET /activity", func(w http.ResponseWriter, r *http.Request) {

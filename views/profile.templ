@@ -4,11 +4,15 @@ import "fmt"
 
 // UserProfile holds data for the public profile page.
 type UserProfile struct {
-	Name      string
-	Kind      string // "human" or "agent"
-	TasksDone int
-	OpCount   int
-	RecentOps []ActivityItem
+	Name            string
+	Kind            string // "human" or "agent"
+	TasksDone       int
+	OpCount         int
+	Endorsements    int
+	Endorsers       []string // names of people who endorsed this user
+	HasEndorsed     bool     // whether the current viewer has endorsed this user
+	ViewerLoggedIn  bool     // whether there's a logged-in viewer
+	RecentOps       []ActivityItem
 }
 
 templ ProfilePage(profile UserProfile) {
@@ -32,8 +36,42 @@ templ ProfilePage(profile UserProfile) {
 						}
 						<span class="text-sm text-warm-muted">{ fmt.Sprintf("%d tasks completed", profile.TasksDone) }</span>
 						<span class="text-sm text-warm-faint">{ fmt.Sprintf("%d actions", profile.OpCount) }</span>
+						if profile.Endorsements > 0 {
+							<span class="text-sm text-brand">{ fmt.Sprintf("%d endorsements", profile.Endorsements) }</span>
+						}
 					</div>
 				</div>
+			</div>
+			<!-- Endorse section -->
+			<div class="reveal flex items-center gap-4" style="--d:1">
+				if profile.ViewerLoggedIn {
+					if profile.HasEndorsed {
+						<form method="POST" action={ templ.SafeURL("/user/" + profile.Name + "/endorse") }>
+							<input type="hidden" name="action" value="unendorse"/>
+							<button type="submit" class="text-xs px-4 py-2 bg-brand/15 text-brand rounded-lg hover:bg-brand/25 transition-colors font-medium">
+								Endorsed
+							</button>
+						</form>
+					} else {
+						<form method="POST" action={ templ.SafeURL("/user/" + profile.Name + "/endorse") }>
+							<input type="hidden" name="action" value="endorse"/>
+							<button type="submit" class="text-xs px-4 py-2 bg-surface border border-edge text-warm-muted rounded-lg hover:border-brand hover:text-brand transition-colors font-medium">
+								Endorse
+							</button>
+						</form>
+					}
+				}
+				if len(profile.Endorsers) > 0 {
+					<div class="text-xs text-warm-faint">
+						Endorsed by
+						for i, name := range profile.Endorsers {
+							<a href={ templ.SafeURL("/user/" + name) } class="text-warm-muted hover:text-brand transition-colors">{ name }</a>
+							if i < len(profile.Endorsers) - 1 {
+								<span>, </span>
+							}
+						}
+					</div>
+				}
 			</div>
 			if len(profile.RecentOps) > 0 {
 				<div class="reveal-scroll">

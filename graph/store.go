@@ -245,6 +245,14 @@ CREATE INDEX IF NOT EXISTS idx_space_members_user ON space_members(user_id);
 
 ALTER TABLE nodes ADD COLUMN IF NOT EXISTS assignee_id TEXT NOT NULL DEFAULT '';
 
+CREATE TABLE IF NOT EXISTS endorsements (
+    from_id    TEXT NOT NULL,
+    to_id      TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (from_id, to_id)
+);
+CREATE INDEX IF NOT EXISTS idx_endorsements_to ON endorsements(to_id);
+
 -- Backfill assignee_id from users table where assignee name matches.
 UPDATE nodes SET assignee_id = u.id
 FROM users u WHERE nodes.assignee = u.name AND nodes.assignee_id = '' AND nodes.assignee != '';
@@ -1063,6 +1071,65 @@ func (s *Store) ListAvailableTasks(ctx context.Context, query string, limit int)
 		tasks = append(tasks, n)
 	}
 	return tasks, rows.Err()
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Endorsements (Layer 9 — Relationship)
+// ────────────────────────────────────────────────────────────────────
+
+// Endorse records an endorsement from one user to another.
+func (s *Store) Endorse(ctx context.Context, fromID, toID string) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO endorsements (from_id, to_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+		fromID, toID)
+	return err
+}
+
+// Unendorse removes an endorsement.
+func (s *Store) Unendorse(ctx context.Context, fromID, toID string) error {
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM endorsements WHERE from_id = $1 AND to_id = $2`,
+		fromID, toID)
+	return err
+}
+
+// CountEndorsements returns how many users have endorsed the given user.
+func (s *Store) CountEndorsements(ctx context.Context, userID string) int {
+	var count int
+	s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM endorsements WHERE to_id = $1`, userID).Scan(&count)
+	return count
+}
+
+// HasEndorsed checks if fromID has endorsed toID.
+func (s *Store) HasEndorsed(ctx context.Context, fromID, toID string) bool {
+	var exists bool
+	s.db.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM endorsements WHERE from_id = $1 AND to_id = $2)`,
+		fromID, toID).Scan(&exists)
+	return exists
+}
+
+// ListEndorsers returns the names of users who endorsed the given user.
+func (s *Store) ListEndorsers(ctx context.Context, userID string, limit int) ([]string, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT u.name FROM endorsements e JOIN users u ON u.id = e.from_id
+		 WHERE e.to_id = $1 ORDER BY e.created_at DESC LIMIT $2`, userID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var names []string
+	for rows.Next() {
+		var name string
+		if rows.Scan(&name) == nil {
+			names = append(names, name)
+		}
+	}
+	return names, rows.Err()
 }
 
 // ────────────────────────────────────────────────────────────────────
