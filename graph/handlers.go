@@ -398,7 +398,7 @@ func (h *Handlers) handleDeleteSpace(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) handleSpaceDefault(w http.ResponseWriter, r *http.Request) {
-	space, _, err := h.spaceForRead(r)
+	space, isOwner, err := h.spaceForRead(r)
 	if errors.Is(err, ErrNotFound) {
 		http.NotFound(w, r)
 		return
@@ -413,12 +413,30 @@ func (h *Handlers) handleSpaceDefault(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Default lens: board for projects, feed for communities.
-	lens := "board"
-	if space.Kind == SpaceCommunity {
-		lens = "feed"
+	ctx := r.Context()
+	uid := h.userID(r)
+
+	spaces, _ := h.store.ListSpaces(ctx, uid)
+	pinned, _ := h.store.ListPinnedNodes(ctx, space.ID)
+	memberCount := h.store.MemberCount(ctx, space.ID)
+	recentOps, _ := h.store.ListOps(ctx, space.ID, 5)
+
+	// Count tasks by state.
+	allTasks, _ := h.store.ListNodes(ctx, ListNodesParams{SpaceID: space.ID, Kind: KindTask})
+	openTasks, activeTasks, doneTasks := 0, 0, 0
+	for _, t := range allTasks {
+		switch t.State {
+		case StateOpen:
+			openTasks++
+		case StateActive, StateReview:
+			activeTasks++
+		case StateDone:
+			doneTasks++
+		}
 	}
-	http.Redirect(w, r, "/app/"+space.Slug+"/"+lens, http.StatusSeeOther)
+
+	SpaceOverview(*space, spaces, pinned, recentOps, h.viewUser(r), isOwner,
+		memberCount, openTasks, activeTasks, doneTasks).Render(ctx, w)
 }
 
 // ────────────────────────────────────────────────────────────────────
