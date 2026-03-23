@@ -1,0 +1,186 @@
+package views
+
+import "fmt"
+
+// SearchResult holds search results grouped by type.
+type SearchResult struct {
+	Query  string
+	Spaces []SearchSpace
+	Nodes  []SearchNode
+	Users  []SearchUser
+}
+
+type SearchSpace struct {
+	Slug        string
+	Name        string
+	Description string
+	Kind        string
+}
+
+type SearchNode struct {
+	ID        string
+	Title     string
+	Body      string
+	Kind      string
+	State     string
+	SpaceSlug string
+	SpaceName string
+}
+
+type SearchUser struct {
+	Name string
+	Kind string
+}
+
+func totalResults(r SearchResult) int {
+	return len(r.Spaces) + len(r.Nodes) + len(r.Users)
+}
+
+templ SearchPage(result SearchResult) {
+	@Layout("Search", "Search lovyou.ai — find spaces, content, and people.") {
+		<div class="space-y-8">
+			<div class="reveal" style="--d:0">
+				<h1 class="text-3xl font-light text-warm">Search</h1>
+				<form action="/search" method="GET" class="mt-4">
+					<div class="flex gap-2">
+						<input
+							type="text"
+							name="q"
+							value={ result.Query }
+							placeholder="Search spaces, content, people..."
+							autofocus
+							class="flex-1 px-4 py-2.5 bg-surface border border-edge rounded-lg text-sm text-warm placeholder-warm-faint focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent"
+						/>
+						<button type="submit" class="px-5 py-2.5 bg-brand text-void rounded-lg hover:bg-brand-dark transition-colors text-sm font-medium">
+							Search
+						</button>
+					</div>
+				</form>
+			</div>
+			if result.Query != "" {
+				if totalResults(result) == 0 {
+					<div class="text-center py-12">
+						<p class="text-warm-muted text-lg">No results for "{ result.Query }"</p>
+						<p class="text-warm-faint text-sm mt-2">Try different keywords or <a href="/discover" class="text-brand hover:underline">browse spaces</a></p>
+					</div>
+				} else {
+					if len(result.Spaces) > 0 {
+						<section class="reveal-scroll">
+							<h2 class="text-sm font-medium text-warm-muted uppercase tracking-wide mb-3">Spaces</h2>
+							<div class="space-y-2">
+								for _, sp := range result.Spaces {
+									<a href={ templ.SafeURL("/app/" + sp.Slug) } class="block p-4 bg-surface rounded-lg border border-edge hover:border-brand hover:shadow-md hover:shadow-brand/5 transition-all">
+										<div class="flex items-center gap-2">
+											<span class={ "text-[10px] font-medium px-2 py-0.5 rounded-full", searchKindClass(sp.Kind) }>{ sp.Kind }</span>
+											<span class="text-sm font-medium text-warm">{ sp.Name }</span>
+										</div>
+										if sp.Description != "" {
+											<p class="text-xs text-warm-muted mt-1 line-clamp-2">{ sp.Description }</p>
+										}
+									</a>
+								}
+							</div>
+						</section>
+					}
+					if len(result.Users) > 0 {
+						<section class="reveal-scroll">
+							<h2 class="text-sm font-medium text-warm-muted uppercase tracking-wide mb-3">People</h2>
+							<div class="space-y-2">
+								for _, u := range result.Users {
+									<a href={ templ.SafeURL("/user/" + u.Name) } class="flex items-center gap-3 p-3 bg-surface rounded-lg border border-edge hover:border-brand transition-all">
+										if u.Kind == "agent" {
+											<span class="w-8 h-8 rounded-full bg-violet-500/10 text-violet-400 text-sm font-bold flex items-center justify-center">
+												{ string([]rune(u.Name)[:1]) }
+											</span>
+										} else {
+											<span class="w-8 h-8 rounded-full bg-brand/10 text-brand text-sm font-bold flex items-center justify-center">
+												{ string([]rune(u.Name)[:1]) }
+											</span>
+										}
+										<span class="text-sm font-medium text-warm">{ u.Name }</span>
+										if u.Kind == "agent" {
+											<span class="text-[9px] font-medium px-1 py-0.5 rounded-full bg-violet-500/10 text-violet-400">agent</span>
+										}
+									</a>
+								}
+							</div>
+						</section>
+					}
+					if len(result.Nodes) > 0 {
+						<section class="reveal-scroll">
+							<h2 class="text-sm font-medium text-warm-muted uppercase tracking-wide mb-3">Content</h2>
+							<div class="space-y-2">
+								for _, n := range result.Nodes {
+									<a href={ templ.SafeURL(fmt.Sprintf("/app/%s/node/%s", n.SpaceSlug, n.ID)) } class="block p-3 bg-surface rounded-lg border border-edge hover:border-brand/40 transition-all">
+										<div class="flex items-center gap-2 mb-1">
+											<span class={ "text-[10px] font-medium px-1.5 py-0.5 rounded-full", searchNodeKindClass(n.Kind) }>{ n.Kind }</span>
+											<span class="text-sm font-medium text-warm">
+												if n.Title != "" {
+													{ n.Title }
+												} else {
+													{ truncateSearch(n.Body, 60) }
+												}
+											</span>
+										</div>
+										<div class="flex items-center gap-2 text-xs text-warm-faint">
+											<span>{ n.SpaceName }</span>
+											<span class={ "px-1 py-0.5 rounded", searchStateClass(n.State) }>{ n.State }</span>
+										</div>
+									</a>
+								}
+							</div>
+						</section>
+					}
+				}
+			}
+		</div>
+	}
+}
+
+func searchKindClass(kind string) string {
+	switch kind {
+	case "project":
+		return "bg-indigo-500/15 text-indigo-400"
+	case "community":
+		return "bg-emerald-500/15 text-emerald-400"
+	case "team":
+		return "bg-amber-500/15 text-amber-400"
+	default:
+		return "bg-warm-faint/20 text-warm-muted"
+	}
+}
+
+func searchNodeKindClass(kind string) string {
+	switch kind {
+	case "task":
+		return "bg-indigo-500/15 text-indigo-400"
+	case "post":
+		return "bg-emerald-500/15 text-emerald-400"
+	case "thread":
+		return "bg-amber-500/15 text-amber-400"
+	case "conversation":
+		return "bg-sky-500/15 text-sky-400"
+	default:
+		return "bg-warm-faint/20 text-warm-muted"
+	}
+}
+
+func searchStateClass(state string) string {
+	switch state {
+	case "open":
+		return "bg-warm-faint/20 text-warm-muted"
+	case "active":
+		return "bg-indigo-500/15 text-indigo-400"
+	case "done":
+		return "bg-emerald-500/15 text-emerald-400"
+	default:
+		return ""
+	}
+}
+
+func truncateSearch(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "..."
+}

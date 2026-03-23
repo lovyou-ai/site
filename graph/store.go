@@ -1074,6 +1074,95 @@ func (s *Store) ListAvailableTasks(ctx context.Context, query string, limit int)
 }
 
 // ────────────────────────────────────────────────────────────────────
+// Search
+// ────────────────────────────────────────────────────────────────────
+
+// SearchResults holds grouped results from a platform search.
+type SearchResults struct {
+	Spaces []Space
+	Nodes  []DashboardTask // reuse DashboardTask for node + space context
+	Users  []struct {
+		Name string
+		Kind string
+	}
+}
+
+// Search performs a text search across public spaces, nodes, and users.
+func (s *Store) Search(ctx context.Context, query string, limit int) SearchResults {
+	if limit <= 0 {
+		limit = 10
+	}
+	var results SearchResults
+	if query == "" {
+		return results
+	}
+	pattern := "%" + query + "%"
+
+	// Spaces
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, slug, name, description, owner_id, kind, visibility, created_at
+		 FROM spaces WHERE visibility = 'public' AND (name ILIKE $1 OR description ILIKE $1)
+		 ORDER BY created_at DESC LIMIT $2`, pattern, limit)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var sp Space
+			if rows.Scan(&sp.ID, &sp.Slug, &sp.Name, &sp.Description, &sp.OwnerID, &sp.Kind, &sp.Visibility, &sp.CreatedAt) == nil {
+				results.Spaces = append(results.Spaces, sp)
+			}
+		}
+	}
+
+	// Nodes from public spaces
+	rows2, err := s.db.QueryContext(ctx,
+		`SELECT n.id, n.space_id, COALESCE(n.parent_id, ''), n.kind, n.title, n.body,
+		        n.state, n.priority, n.assignee, n.assignee_id, n.author, n.author_id, n.author_kind,
+		        n.tags, n.due_date, n.created_at, n.updated_at, 0, 0, 0, s.slug, s.name
+		 FROM nodes n
+		 JOIN spaces s ON s.id = n.space_id AND s.visibility = 'public'
+		 WHERE n.title ILIKE $1 OR n.body ILIKE $1
+		 ORDER BY n.created_at DESC LIMIT $2`, pattern, limit)
+	if err == nil {
+		defer rows2.Close()
+		for rows2.Next() {
+			var dt DashboardTask
+			var parentID sql.NullString
+			var dueDate sql.NullTime
+			if rows2.Scan(
+				&dt.ID, &dt.SpaceID, &parentID, &dt.Kind, &dt.Title, &dt.Body,
+				&dt.State, &dt.Priority, &dt.Assignee, &dt.AssigneeID, &dt.Author, &dt.AuthorID, &dt.AuthorKind,
+				pq.Array(&dt.Tags), &dueDate, &dt.CreatedAt, &dt.UpdatedAt,
+				&dt.ChildCount, &dt.ChildDone, &dt.BlockerCount,
+				&dt.SpaceSlug, &dt.SpaceName,
+			) == nil {
+				if parentID.Valid {
+					dt.ParentID = parentID.String
+				}
+				results.Nodes = append(results.Nodes, dt)
+			}
+		}
+	}
+
+	// Users
+	rows3, err := s.db.QueryContext(ctx,
+		`SELECT name, kind FROM users WHERE name ILIKE $1 ORDER BY name LIMIT $2`, pattern, limit)
+	if err == nil {
+		defer rows3.Close()
+		for rows3.Next() {
+			var u struct {
+				Name string
+				Kind string
+			}
+			if rows3.Scan(&u.Name, &u.Kind) == nil {
+				results.Users = append(results.Users, u)
+			}
+		}
+	}
+
+	return results
+}
+
+// ────────────────────────────────────────────────────────────────────
 // Endorsements (Layer 9 — Relationship)
 // ────────────────────────────────────────────────────────────────────
 

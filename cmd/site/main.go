@@ -240,6 +240,30 @@ func main() {
 		})
 	}
 
+	// Search page — unified search across spaces, content, and users.
+	mux.HandleFunc("GET /search", func(w http.ResponseWriter, r *http.Request) {
+		q := strings.TrimSpace(r.URL.Query().Get("q"))
+		result := views.SearchResult{Query: q}
+		if graphStore != nil && q != "" {
+			sr := graphStore.Search(r.Context(), q, 10)
+			for _, sp := range sr.Spaces {
+				result.Spaces = append(result.Spaces, views.SearchSpace{
+					Slug: sp.Slug, Name: sp.Name, Description: sp.Description, Kind: sp.Kind,
+				})
+			}
+			for _, n := range sr.Nodes {
+				result.Nodes = append(result.Nodes, views.SearchNode{
+					ID: n.ID, Title: n.Title, Body: n.Body, Kind: n.Kind,
+					State: n.State, SpaceSlug: n.SpaceSlug, SpaceName: n.SpaceName,
+				})
+			}
+			for _, u := range sr.Users {
+				result.Users = append(result.Users, views.SearchUser{Name: u.Name, Kind: u.Kind})
+			}
+		}
+		views.SearchPage(result).Render(r.Context(), w)
+	})
+
 	// Discover page — list public spaces (no auth required).
 	mux.HandleFunc("GET /discover", func(w http.ResponseWriter, r *http.Request) {
 		if graphStore == nil {
