@@ -1859,6 +1859,84 @@ func (s *Store) ListBlockers(ctx context.Context, nodeID string) ([]Node, error)
 	return nodes, rows.Err()
 }
 
+// ListDependencies returns all nodes that nodeID depends on (both done and not done).
+func (s *Store) ListDependencies(ctx context.Context, nodeID string) ([]Node, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT n.id, n.space_id, COALESCE(n.parent_id, ''), n.kind, n.title, n.body,
+		       n.state, n.priority, n.assignee, n.assignee_id, n.author, n.author_id, n.author_kind,
+		       n.tags, n.pinned, n.due_date, n.created_at, n.updated_at, 0, 0, 0
+		FROM nodes n
+		JOIN node_deps d ON d.depends_on = n.id
+		WHERE d.node_id = $1
+		ORDER BY n.state != 'done', n.created_at`, nodeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var nodes []Node
+	for rows.Next() {
+		var n Node
+		var parentID sql.NullString
+		var dueDate sql.NullTime
+		if err := rows.Scan(
+			&n.ID, &n.SpaceID, &parentID, &n.Kind, &n.Title, &n.Body,
+			&n.State, &n.Priority, &n.Assignee, &n.AssigneeID, &n.Author, &n.AuthorID, &n.AuthorKind,
+			pq.Array(&n.Tags), &n.Pinned, &dueDate, &n.CreatedAt, &n.UpdatedAt,
+			&n.ChildCount, &n.ChildDone, &n.BlockerCount,
+		); err != nil {
+			return nil, err
+		}
+		if parentID.Valid {
+			n.ParentID = parentID.String
+		}
+		if dueDate.Valid {
+			d := dueDate.Time
+			n.DueDate = &d
+		}
+		nodes = append(nodes, n)
+	}
+	return nodes, rows.Err()
+}
+
+// ListDependents returns all nodes that depend on nodeID.
+func (s *Store) ListDependents(ctx context.Context, nodeID string) ([]Node, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT n.id, n.space_id, COALESCE(n.parent_id, ''), n.kind, n.title, n.body,
+		       n.state, n.priority, n.assignee, n.assignee_id, n.author, n.author_id, n.author_kind,
+		       n.tags, n.pinned, n.due_date, n.created_at, n.updated_at, 0, 0, 0
+		FROM nodes n
+		JOIN node_deps d ON d.node_id = n.id
+		WHERE d.depends_on = $1
+		ORDER BY n.state != 'done', n.created_at`, nodeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var nodes []Node
+	for rows.Next() {
+		var n Node
+		var parentID sql.NullString
+		var dueDate sql.NullTime
+		if err := rows.Scan(
+			&n.ID, &n.SpaceID, &parentID, &n.Kind, &n.Title, &n.Body,
+			&n.State, &n.Priority, &n.Assignee, &n.AssigneeID, &n.Author, &n.AuthorID, &n.AuthorKind,
+			pq.Array(&n.Tags), &n.Pinned, &dueDate, &n.CreatedAt, &n.UpdatedAt,
+			&n.ChildCount, &n.ChildDone, &n.BlockerCount,
+		); err != nil {
+			return nil, err
+		}
+		if parentID.Valid {
+			n.ParentID = parentID.String
+		}
+		if dueDate.Valid {
+			d := dueDate.Time
+			n.DueDate = &d
+		}
+		nodes = append(nodes, n)
+	}
+	return nodes, rows.Err()
+}
+
 // ────────────────────────────────────────────────────────────────────
 // Mind State
 // ────────────────────────────────────────────────────────────────────

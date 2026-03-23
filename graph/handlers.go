@@ -941,8 +941,12 @@ func (h *Handlers) handleNodeDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Fetch dependencies (what this node depends on) and dependents (what depends on this).
+	dependencies, _ := h.store.ListDependencies(r.Context(), nodeID)
+	dependents, _ := h.store.ListDependents(r.Context(), nodeID)
+
 	if wantsJSON(r) {
-		writeJSON(w, http.StatusOK, map[string]any{"space": space, "node": node, "children": children, "ops": ops})
+		writeJSON(w, http.StatusOK, map[string]any{"space": space, "node": node, "children": children, "ops": ops, "dependencies": dependencies, "dependents": dependents})
 		return
 	}
 
@@ -962,7 +966,7 @@ func (h *Handlers) handleNodeDetail(w http.ResponseWriter, r *http.Request) {
 		parents[i], parents[j] = parents[j], parents[i]
 	}
 
-	NodeDetailView(*space, *node, children, ops, h.viewUser(r), isOwner, parents).Render(r.Context(), w)
+	NodeDetailView(*space, *node, children, ops, h.viewUser(r), isOwner, parents, dependencies, dependents).Render(r.Context(), w)
 }
 
 // ────────────────────────────────────────────────────────────────────
