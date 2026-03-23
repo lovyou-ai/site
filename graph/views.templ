@@ -196,6 +196,47 @@ templ commandPalette() {
 	});
 	</script>
 	<style>@keyframes shrink{from{width:100%}to{width:0}}</style>
+	<!-- Keyboard shortcuts -->
+	<dialog id="shortcuts-help" class="bg-transparent backdrop:bg-void/60 backdrop:backdrop-blur-sm p-0 m-0 fixed inset-0 w-full h-full z-50">
+		<div class="flex items-center justify-center min-h-full" onclick="document.getElementById('shortcuts-help').close()">
+			<div class="bg-surface border border-edge rounded-xl shadow-2xl p-6 max-w-sm" onclick="event.stopPropagation()">
+				<h2 class="font-display text-lg text-warm mb-4">Keyboard shortcuts</h2>
+				<div class="grid grid-cols-2 gap-y-2 gap-x-6 text-sm">
+					<kbd class="text-warm-faint">Ctrl+K</kbd><span class="text-warm-muted">Command palette</span>
+					<kbd class="text-warm-faint">?</kbd><span class="text-warm-muted">This help</span>
+					<kbd class="text-warm-faint">G then B</kbd><span class="text-warm-muted">Go to Board</span>
+					<kbd class="text-warm-faint">G then F</kbd><span class="text-warm-muted">Go to Feed</span>
+					<kbd class="text-warm-faint">G then C</kbd><span class="text-warm-muted">Go to Chat</span>
+					<kbd class="text-warm-faint">G then A</kbd><span class="text-warm-muted">Go to Activity</span>
+					<kbd class="text-warm-faint">G then K</kbd><span class="text-warm-muted">Go to Knowledge</span>
+					<kbd class="text-warm-faint">G then H</kbd><span class="text-warm-muted">Go Home</span>
+				</div>
+				<p class="text-[10px] text-warm-faint mt-4">Press Esc to close</p>
+			</div>
+		</div>
+	</dialog>
+	<script>
+	(function(){
+		var gPending=false;
+		document.addEventListener('keydown',function(e){
+			var t=e.target.tagName;if(t==='INPUT'||t==='TEXTAREA'||t==='SELECT')return;
+			if(e.key==='?'&&!e.ctrlKey&&!e.metaKey){e.preventDefault();document.getElementById('shortcuts-help').showModal();return}
+			if(e.key==='g'&&!e.ctrlKey&&!e.metaKey){gPending=true;setTimeout(function(){gPending=false},1000);return}
+			if(gPending){
+				gPending=false;
+				var m=window.location.pathname.match(/^\/app\/([^/]+)/);
+				var slug=m?m[1]:'';
+				var map={b:'board',f:'feed',c:'conversations',a:'activity',k:'knowledge',h:''};
+				var lens=map[e.key];
+				if(lens!==undefined){
+					e.preventDefault();
+					if(e.key==='h')window.location='/app';
+					else if(slug)window.location='/app/'+slug+'/'+lens;
+				}
+			}
+		});
+	})();
+	</script>
 	<dialog id="cmd-palette" class="bg-transparent backdrop:bg-void/60 backdrop:backdrop-blur-sm p-0 m-0 fixed inset-0 w-full h-full z-50">
 		<div class="flex items-start justify-center pt-[20vh] min-h-full" onclick="document.getElementById('cmd-palette').close()">
 			<div class="w-full max-w-lg bg-surface border border-edge rounded-xl shadow-2xl shadow-brand/10 overflow-hidden" onclick="event.stopPropagation()">
@@ -1007,6 +1048,20 @@ script setAssignee(name string) {
 	document.getElementById('task-assignee').value = name;
 }
 
+script replyTo(author string, text string) {
+	var bar = document.getElementById('reply-bar');
+	var barText = document.getElementById('reply-bar-text');
+	if (bar && barText) {
+		barText.textContent = author + ': ' + text;
+		bar.classList.remove('hidden');
+		bar.dataset.author = author;
+		bar.dataset.text = text;
+		// Focus the textarea
+		var ta = document.querySelector('textarea[name="body"]');
+		if (ta) ta.focus();
+	}
+}
+
 script toggleForm(id string) {
 	var el = document.getElementById(id);
 	if (!el) return;
@@ -1444,13 +1499,14 @@ templ ConversationDetailView(space Space, convo Node, messages []Node, user View
 						<input type="hidden" name="op" value="respond"/>
 						<input type="hidden" name="parent_id" value={ convo.ID }/>
 						<textarea
+							id="chat-body"
 							name="body"
 							placeholder="Write a message... (Shift+Enter for new line)"
 							required
 							autocomplete="off"
 							rows="1"
 							class="flex-1 px-4 py-2 bg-elevated border border-edge rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent text-sm text-warm placeholder-warm-faint resize-none overflow-hidden"
-							onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();this.form.requestSubmit();}"
+							onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();prependReply();this.form.requestSubmit();}"
 							oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,144)+'px'"
 						></textarea>
 						<button type="submit" class="px-4 py-2 bg-brand text-void rounded-lg hover:bg-brand-dark transition-colors text-sm font-medium">Send</button>
@@ -1458,15 +1514,23 @@ templ ConversationDetailView(space Space, convo Node, messages []Node, user View
 				</div>
 			}
 		</div>
-		<!-- Scroll to bottom on load -->
-		<script>
+		<!-- Reply preview bar -->
+			<div id="reply-bar" class="hidden border-t border-brand/20 bg-brand/5 px-6 py-2 flex items-center gap-2 text-xs text-warm-muted flex-shrink-0">
+				<span class="text-brand">Replying to</span>
+				<span id="reply-bar-text" class="truncate"></span>
+				<button type="button" onclick="cancelReply()" class="ml-auto text-warm-faint hover:text-warm cursor-pointer">✕</button>
+			</div>
+			<!-- Scroll to bottom + reply helpers -->
+			<script>
 			(function(){var m=document.getElementById('messages');if(m)m.scrollTop=m.scrollHeight;})();
-		</script>
+			function cancelReply(){var b=document.getElementById('reply-bar');if(b){b.classList.add('hidden');b.dataset.author='';b.dataset.text=''}}
+			function prependReply(){var b=document.getElementById('reply-bar');var ta=document.getElementById('chat-body');if(b&&ta&&!b.classList.contains('hidden')&&b.dataset.author){ta.value='> '+b.dataset.author+': '+b.dataset.text+'\n\n'+ta.value;cancelReply()}}
+			</script>
 	}
 }
 
 templ chatMessage(msg Node, currentUserID string) {
-	<div class={ "flex gap-3", templ.KV("flex-row-reverse", msg.AuthorID == currentUserID) } data-ts={ msg.CreatedAt.Format(time.RFC3339Nano) }>
+	<div class={ "group flex gap-3", templ.KV("flex-row-reverse", msg.AuthorID == currentUserID) } data-ts={ msg.CreatedAt.Format(time.RFC3339Nano) }>
 		if msg.AuthorKind == "agent" {
 			<span class="w-8 h-8 rounded-full bg-violet-500/10 text-violet-400 text-xs font-bold flex items-center justify-center flex-shrink-0" title="Agent">
 				{ initial(msg.Author) }
@@ -1488,6 +1552,8 @@ templ chatMessage(msg Node, currentUserID string) {
 					<span class="text-[9px] font-medium px-1 py-0.5 rounded-full bg-violet-500/10 text-violet-400">agent</span>
 				}
 				<span class="text-[10px] text-warm-faint ml-auto">{ msg.CreatedAt.Format("3:04 PM") }</span>
+				<button type="button" class="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] text-warm-faint hover:text-brand ml-1 cursor-pointer"
+					onclick={ replyTo(msg.Author, truncate(msg.Body, 80)) }>reply</button>
 			</div>
 			<div class="text-sm text-warm-secondary prose prose-invert prose-sm max-w-none">
 							@renderMarkdown(msg.Body)
