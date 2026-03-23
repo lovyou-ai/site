@@ -17,8 +17,9 @@ import (
 
 // ViewUser holds user info for templates.
 type ViewUser struct {
-	Name    string
-	Picture string
+	Name        string
+	Picture     string
+	UnreadCount int
 }
 
 // ViewAPIKey holds API key info for templates.
@@ -112,7 +113,9 @@ func (h *Handlers) viewUser(r *http.Request) ViewUser {
 	if u == nil {
 		return ViewUser{Name: "Anonymous"}
 	}
-	return ViewUser{Name: u.Name, Picture: u.Picture}
+	uid := h.userID(r)
+	unread := h.store.UnreadCount(r.Context(), uid)
+	return ViewUser{Name: u.Name, Picture: u.Picture, UnreadCount: unread}
 }
 
 func (h *Handlers) userID(r *http.Request) string {
