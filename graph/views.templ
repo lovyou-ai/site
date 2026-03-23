@@ -492,7 +492,7 @@ templ dashboardTaskTab(value, label, active string) {
 templ dashboardTaskCard(t DashboardTask) {
 	<a
 		href={ templ.SafeURL(fmt.Sprintf("/app/%s/node/%s", t.SpaceSlug, t.ID)) }
-		class="flex items-center gap-3 p-3 bg-surface rounded-lg border border-edge hover:border-brand/40 hover:shadow transition-all"
+		class="flex items-center gap-3 p-3 bg-surface rounded-lg border border-edge hover:border-brand/40 hover:shadow-lg hover:shadow-brand/5 hover:-translate-y-0.5 transition-all duration-200"
 	>
 		<span
 			class="w-2 h-2 rounded-full flex-shrink-0"
@@ -525,7 +525,7 @@ templ dashboardTaskCard(t DashboardTask) {
 templ dashboardConvoCard(c DashboardConversation) {
 	<a
 		href={ templ.SafeURL(fmt.Sprintf("/app/%s/conversation/%s", c.SpaceSlug, c.ID)) }
-		class="block p-3 bg-surface rounded-lg border border-edge hover:border-brand/40 hover:shadow transition-all"
+		class="block p-3 bg-surface rounded-lg border border-edge hover:border-brand/40 hover:shadow-lg hover:shadow-brand/5 hover:-translate-y-0.5 transition-all duration-200"
 	>
 		<div class="flex items-center justify-between mb-1">
 			<span class="text-sm font-medium text-warm truncate">{ c.Title }</span>
@@ -846,6 +846,20 @@ templ BoardView(space Space, spaces []Space, columns []BoardColumn, user ViewUse
 					}
 				</div>
 			}
+			<script>
+			function boardDrop(e,col){
+				e.preventDefault();
+				var nodeId=e.dataTransfer.getData('text/plain');
+				if(!nodeId)return;
+				var state=col.dataset.state;
+				var slug=col.dataset.spaceSlug;
+				fetch('/app/'+slug+'/node/'+nodeId+'/state',{
+					method:'POST',
+					headers:{'Content-Type':'application/x-www-form-urlencoded'},
+					body:'state='+encodeURIComponent(state)
+				}).then(function(){window.location.reload()});
+			}
+			</script>
 		</div>
 	}
 }
@@ -909,7 +923,12 @@ templ boardColumn(spaceSlug string, col BoardColumn, canWrite bool, agents []str
 		</div>
 		<div
 			id={ col.State + "-column" }
-			class="flex-1 space-y-2 overflow-y-auto rounded-xl bg-elevated/40 p-2 min-h-[200px]"
+			data-state={ col.State }
+			data-space-slug={ spaceSlug }
+			class="flex-1 space-y-2 overflow-y-auto rounded-xl bg-elevated/40 p-2 min-h-[200px] transition-colors duration-150"
+			ondragover="event.preventDefault();event.dataTransfer.dropEffect='move';this.classList.add('bg-brand/10','border','border-brand/30')"
+			ondragleave="this.classList.remove('bg-brand/10','border','border-brand/30')"
+			ondrop="this.classList.remove('bg-brand/10','border','border-brand/30');boardDrop(event,this)"
 		>
 			if col.State == StateOpen && canWrite {
 				@newTaskInline(spaceSlug, agents)
@@ -984,7 +1003,12 @@ templ TaskCard(node Node, spaceSlug string) {
 	<a
 		href={ templ.SafeURL(fmt.Sprintf("/app/%s/node/%s", spaceSlug, node.ID)) }
 		id={ "node-" + node.ID }
-		class="block bg-surface rounded-lg border border-edge shadow-sm p-3 hover:border-brand/30 hover:shadow-md hover:shadow-brand/5 transition-all duration-200 cursor-pointer"
+		draggable="true"
+		data-node-id={ node.ID }
+		data-space-slug={ spaceSlug }
+		class="block bg-surface rounded-lg border border-edge shadow-sm p-3 hover:border-brand/30 hover:shadow-lg hover:shadow-brand/10 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer"
+		ondragstart="event.dataTransfer.setData('text/plain',this.dataset.nodeId);event.dataTransfer.effectAllowed='move';this.style.opacity='0.4'"
+		ondragend="this.style.opacity='1'"
 	>
 		<div class="flex items-start gap-2">
 			if node.Pinned {
@@ -1176,7 +1200,7 @@ templ ThreadsView(space Space, spaces []Space, threads []Node, user ViewUser, is
 			<div class="space-y-2">
 				for _, thread := range threads {
 					<a href={ templ.SafeURL(fmt.Sprintf("/app/%s/node/%s", space.Slug, thread.ID)) }
-						class="block bg-surface rounded-lg border border-edge p-4 hover:border-brand/40 hover:shadow transition-all">
+						class="block bg-surface rounded-lg border border-edge p-4 hover:border-brand/40 hover:shadow-lg hover:shadow-brand/5 hover:-translate-y-0.5 transition-all duration-200">
 						<div class="flex items-center justify-between">
 							<h3 class="font-medium text-warm">{ thread.Title }</h3>
 							<span class="text-xs text-warm-faint">{ fmt.Sprintf("%d replies", thread.ChildCount) }</span>
@@ -1265,7 +1289,7 @@ templ ConversationsView(space Space, spaces []Space, convos []ConversationSummar
 			<div class="space-y-2">
 				for _, convo := range convos {
 					<a href={ templ.SafeURL(fmt.Sprintf("/app/%s/conversation/%s", space.Slug, convo.ID)) }
-						class="block bg-surface rounded-lg border border-edge p-4 hover:border-brand/40 hover:shadow transition-all">
+						class="block bg-surface rounded-lg border border-edge p-4 hover:border-brand/40 hover:shadow-lg hover:shadow-brand/5 hover:-translate-y-0.5 transition-all duration-200">
 						<div class="flex items-center justify-between mb-1">
 							<h3 class="font-medium text-warm">{ convo.Title }</h3>
 							<span class="text-xs text-warm-faint">{ fmt.Sprintf("%d messages", convo.ChildCount) }</span>
@@ -1346,8 +1370,12 @@ templ ConversationDetailView(space Space, convo Node, messages []Node, user View
 					if len(messages) == 0 {
 						<p id="empty-state" class="text-center text-warm-faint py-12">No messages yet. Start the conversation!</p>
 					}
-					for _, msg := range messages {
-						@chatMessage(msg, userID)
+					for i, msg := range messages {
+						if i > 0 && messages[i-1].AuthorID == msg.AuthorID && msg.CreatedAt.Sub(messages[i-1].CreatedAt) < 5*time.Minute {
+							@chatMessageCompact(msg, userID)
+						} else {
+							@chatMessage(msg, userID)
+						}
 					}
 				</div>
 				<!-- Thinking indicator (hidden by default) -->
@@ -1441,6 +1469,20 @@ templ chatMessage(msg Node, currentUserID string) {
 				}
 				<span class="text-[10px] text-warm-faint ml-auto">{ msg.CreatedAt.Format("3:04 PM") }</span>
 			</div>
+			<div class="text-sm text-warm-secondary prose prose-invert prose-sm max-w-none">
+							@renderMarkdown(msg.Body)
+						</div>
+		</div>
+	</div>
+}
+
+templ chatMessageCompact(msg Node, currentUserID string) {
+	<div class={ "flex gap-3", templ.KV("flex-row-reverse", msg.AuthorID == currentUserID) } data-ts={ msg.CreatedAt.Format(time.RFC3339Nano) }>
+		<div class="w-8 flex-shrink-0"></div>
+		<div class={ "max-w-[75%] rounded-lg px-4 py-1",
+			templ.KV("bg-brand/10 border border-brand/20", msg.AuthorID == currentUserID),
+			templ.KV("bg-surface border border-edge", msg.AuthorID != currentUserID && msg.AuthorKind != "agent"),
+			templ.KV("bg-violet-500/5 border border-violet-500/20", msg.AuthorKind == "agent") }>
 			<div class="text-sm text-warm-secondary prose prose-invert prose-sm max-w-none">
 							@renderMarkdown(msg.Body)
 						</div>
