@@ -73,6 +73,7 @@ func (h *Handlers) Register(mux *http.ServeMux) {
 	mux.Handle("GET /app/{slug}/activity", h.readWrap(h.handleActivity))
 	mux.Handle("GET /app/{slug}/knowledge", h.readWrap(h.handleKnowledge))
 	mux.Handle("GET /app/{slug}/governance", h.readWrap(h.handleGovernance))
+	mux.Handle("GET /app/{slug}/changelog", h.readWrap(h.handleChangelog))
 
 	// Conversation detail (optional auth).
 	mux.Handle("GET /app/{slug}/conversation/{id}", h.readWrap(h.handleConversationDetail))
@@ -632,6 +633,32 @@ func (h *Handlers) handleKnowledge(w http.ResponseWriter, r *http.Request) {
 	}
 
 	KnowledgeView(*space, spaces, claims, challengeCounts, h.viewUser(r)).Render(r.Context(), w)
+}
+
+func (h *Handlers) handleChangelog(w http.ResponseWriter, r *http.Request) {
+	space, _, err := h.spaceForRead(r)
+	if errors.Is(err, ErrNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	spaces, _ := h.store.ListSpaces(r.Context(), h.userID(r))
+	entries, err := h.store.ListChangelog(r.Context(), space.ID, 50)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if wantsJSON(r) {
+		writeJSON(w, http.StatusOK, map[string]any{"space": space, "changelog": entries})
+		return
+	}
+
+	ChangelogView(*space, spaces, entries, h.viewUser(r)).Render(r.Context(), w)
 }
 
 func (h *Handlers) handleGovernance(w http.ResponseWriter, r *http.Request) {

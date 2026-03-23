@@ -97,6 +97,7 @@ templ appLayout(space Space, spaces []Space, activeLens string, user ViewUser) {
 					@mobileLensTab(space.Slug, "people", "People", activeLens)
 					@mobileLensTab(space.Slug, "knowledge", "Knowledge", activeLens)
 					@mobileLensTab(space.Slug, "governance", "Governance", activeLens)
+					@mobileLensTab(space.Slug, "changelog", "Changelog", activeLens)
 					@mobileLensTab(space.Slug, "activity", "Activity", activeLens)
 					@mobileLensTab(space.Slug, "settings", "Settings", activeLens)
 				</div>
@@ -116,6 +117,7 @@ templ appLayout(space Space, spaces []Space, activeLens string, user ViewUser) {
 								@lensLink(space.Slug, "people", "People", activeLens, peopleIcon())
 								@lensLink(space.Slug, "knowledge", "Knowledge", activeLens, knowledgeIcon())
 								@lensLink(space.Slug, "governance", "Governance", activeLens, governanceIcon())
+								@lensLink(space.Slug, "changelog", "Changelog", activeLens, changelogIcon())
 								@lensLink(space.Slug, "activity", "Activity", activeLens, activityIcon())
 								@lensLink(space.Slug, "settings", "Settings", activeLens, settingsIcon())
 							</nav>
@@ -228,6 +230,12 @@ templ settingsIcon() {
 templ knowledgeIcon() {
 	<svg class="w-4 h-4 text-warm-faint" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 		<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+	</svg>
+}
+
+templ changelogIcon() {
+	<svg class="w-4 h-4 text-warm-faint" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+		<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path>
 	</svg>
 }
 
@@ -1218,6 +1226,51 @@ templ SettingsView(space Space, spaces []Space, reports []Report, user ViewUser,
 					</button>
 				</form>
 			</div>
+		</div>
+	}
+}
+
+// ── Changelog view (Layer 5 — Build) ────────────────────────────
+
+templ ChangelogView(space Space, spaces []Space, entries []ChangelogEntry, user ViewUser) {
+	@appLayout(space, spaces, "changelog", user) {
+		<div class="p-6 md:p-8 space-y-6">
+			<div>
+				<h1 class="text-2xl font-light text-warm">Changelog</h1>
+				<p class="text-sm text-warm-muted mt-1">What was built — completed tasks with accountability</p>
+			</div>
+			if len(entries) == 0 {
+				<div class="text-center py-12">
+					<p class="text-warm-muted text-lg">Nothing shipped yet</p>
+					<p class="text-warm-faint text-sm mt-2">Completed tasks will appear here as a build history</p>
+				</div>
+			} else {
+				<div class="space-y-3">
+					for _, e := range entries {
+						<div class="p-4 bg-surface rounded-lg border border-edge">
+							<div class="flex items-center gap-2 mb-1">
+								<span class="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0"></span>
+								<a href={ templ.SafeURL(fmt.Sprintf("/app/%s/node/%s", space.Slug, e.ID)) } class="text-sm font-medium text-warm hover:text-brand transition-colors">
+									{ e.Title }
+								</a>
+							</div>
+							if e.Body != "" {
+								<p class="text-xs text-warm-muted ml-4 line-clamp-2">{ truncate(e.Body, 200) }</p>
+							}
+							<div class="flex items-center gap-3 mt-2 ml-4 text-xs text-warm-faint">
+								if e.CompletedByKind == "agent" {
+									<span class="w-4 h-4 rounded-full bg-violet-500/10 text-violet-400 text-[8px] font-bold flex items-center justify-center">{ initial(e.CompletedBy) }</span>
+								}
+								<span>{ e.CompletedBy }</span>
+								<span>{ e.CompletedAt.Format("Jan 2, 3:04 PM") }</span>
+								if e.Assignee != "" {
+									<span class="text-warm-faint">assigned to { e.Assignee }</span>
+								}
+							</div>
+						</div>
+					}
+				</div>
+			}
 		</div>
 	}
 }

@@ -1089,6 +1089,61 @@ func (s *Store) ListAvailableTasks(ctx context.Context, query string, limit int)
 }
 
 // ────────────────────────────────────────────────────────────────────
+// Changelog (Layer 5 — Build)
+// ────────────────────────────────────────────────────────────────────
+
+// ChangelogEntry is a completed task with its completion op.
+type ChangelogEntry struct {
+	Node
+	CompletedBy   string    `json:"completed_by"`
+	CompletedByKind string  `json:"completed_by_kind"`
+	CompletedAt   time.Time `json:"completed_at"`
+}
+
+// ListChangelog returns recently completed tasks in a space, most recent first.
+func (s *Store) ListChangelog(ctx context.Context, spaceID string, limit int) ([]ChangelogEntry, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT n.id, n.space_id, COALESCE(n.parent_id, ''), n.kind, n.title, n.body,
+		       n.state, n.priority, n.assignee, n.assignee_id, n.author, n.author_id, n.author_kind,
+		       n.tags, n.due_date, n.created_at, n.updated_at, 0, 0, 0,
+		       o.actor, COALESCE(u.kind, 'human'), o.created_at
+		FROM nodes n
+		JOIN ops o ON o.node_id = n.id AND o.op = 'complete'
+		LEFT JOIN users u ON u.id = o.actor_id
+		WHERE n.space_id = $1 AND n.kind = 'task' AND n.state = 'done'
+		ORDER BY o.created_at DESC
+		LIMIT $2`, spaceID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list changelog: %w", err)
+	}
+	defer rows.Close()
+
+	var entries []ChangelogEntry
+	for rows.Next() {
+		var e ChangelogEntry
+		var parentID sql.NullString
+		var dueDate sql.NullTime
+		if err := rows.Scan(
+			&e.ID, &e.SpaceID, &parentID, &e.Kind, &e.Title, &e.Body,
+			&e.State, &e.Priority, &e.Assignee, &e.AssigneeID, &e.Author, &e.AuthorID, &e.AuthorKind,
+			pq.Array(&e.Tags), &dueDate, &e.CreatedAt, &e.UpdatedAt,
+			&e.ChildCount, &e.ChildDone, &e.BlockerCount,
+			&e.CompletedBy, &e.CompletedByKind, &e.CompletedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan changelog: %w", err)
+		}
+		if parentID.Valid {
+			e.ParentID = parentID.String
+		}
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
+}
+
+// ────────────────────────────────────────────────────────────────────
 // Governance (Layer 11)
 // ────────────────────────────────────────────────────────────────────
 
