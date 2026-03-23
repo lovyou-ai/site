@@ -800,6 +800,7 @@ templ newTaskInline(spaceSlug string, agents []string) {
 					<option value="high">High</option>
 					<option value="urgent">Urgent</option>
 				</select>
+				<input type="date" name="due_date" class="text-xs px-2 py-1 bg-elevated border border-edge rounded-md focus:outline-none focus:ring-2 focus:ring-brand text-warm-muted" title="Due date (optional)"/>
 				<div class="flex-1"></div>
 				<button type="button" onclick="document.getElementById('new-task-form').classList.add('hidden')" class="text-xs text-warm-faint hover:text-warm-muted px-2 py-1">Cancel</button>
 				<button type="submit" class="text-xs px-3 py-1 bg-brand text-void rounded-md hover:bg-brand-dark transition-colors font-medium">Create</button>

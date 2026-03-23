@@ -981,6 +981,12 @@ func (h *Handlers) handleOp(w http.ResponseWriter, r *http.Request) {
 		if assigneeName != "" {
 			assigneeID = h.store.ResolveUserID(ctx, assigneeName)
 		}
+		var dueDate *time.Time
+		if ds := r.FormValue("due_date"); ds != "" {
+			if t, err := time.Parse("2006-01-02", ds); err == nil {
+				dueDate = &t
+			}
+		}
 		node, err := h.store.CreateNode(ctx, CreateNodeParams{
 			SpaceID:    space.ID,
 			Kind:       KindTask,
@@ -992,6 +998,7 @@ func (h *Handlers) handleOp(w http.ResponseWriter, r *http.Request) {
 			Author:     actor,
 			AuthorID:   actorID,
 			AuthorKind: actorKind,
+			DueDate:    dueDate,
 		})
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
