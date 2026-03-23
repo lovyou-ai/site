@@ -423,6 +423,29 @@ func main() {
 		views.MarketPage(tasks).Render(r.Context(), w)
 	})
 
+	// Knowledge page — claims across public spaces (Layer 6).
+	mux.HandleFunc("GET /knowledge", func(w http.ResponseWriter, r *http.Request) {
+		if graphStore == nil {
+			views.KnowledgePage(nil, "").Render(r.Context(), w)
+			return
+		}
+		stateFilter := r.URL.Query().Get("state")
+		claims, err := graphStore.ListKnowledgeClaims(r.Context(), stateFilter, "", 100)
+		if err != nil {
+			log.Printf("knowledge: %v", err)
+		}
+		var vc []views.KnowledgeClaim
+		for _, c := range claims {
+			vc = append(vc, views.KnowledgeClaim{
+				ID: c.ID, Title: c.Title, Body: c.Body, State: c.State,
+				Author: c.Author, AuthorKind: c.AuthorKind,
+				SpaceSlug: c.SpaceSlug, SpaceName: c.SpaceName,
+				Challenges: c.Challenges, CreatedAt: c.CreatedAt,
+			})
+		}
+		views.KnowledgePage(vc, stateFilter).Render(r.Context(), w)
+	})
+
 	// Health check for Fly.io.
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -452,6 +475,7 @@ func main() {
 		addURL("/discover")
 		addURL("/market")
 		addURL("/activity")
+		addURL("/knowledge")
 		addURL("/reference")
 		addURL("/reference/grammar")
 		addURL("/reference/cognitive-grammar")

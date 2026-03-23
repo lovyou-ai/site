@@ -95,6 +95,7 @@ templ appLayout(space Space, spaces []Space, activeLens string, user ViewUser) {
 					@mobileLensTab(space.Slug, "threads", "Threads", activeLens)
 					@mobileLensTab(space.Slug, "conversations", "Chat", activeLens)
 					@mobileLensTab(space.Slug, "people", "People", activeLens)
+					@mobileLensTab(space.Slug, "knowledge", "Knowledge", activeLens)
 					@mobileLensTab(space.Slug, "activity", "Activity", activeLens)
 					@mobileLensTab(space.Slug, "settings", "Settings", activeLens)
 				</div>
@@ -112,6 +113,7 @@ templ appLayout(space Space, spaces []Space, activeLens string, user ViewUser) {
 								@lensLink(space.Slug, "threads", "Threads", activeLens, threadsIcon())
 								@lensLink(space.Slug, "conversations", "Chat", activeLens, conversationsIcon())
 								@lensLink(space.Slug, "people", "People", activeLens, peopleIcon())
+								@lensLink(space.Slug, "knowledge", "Knowledge", activeLens, knowledgeIcon())
 								@lensLink(space.Slug, "activity", "Activity", activeLens, activityIcon())
 								@lensLink(space.Slug, "settings", "Settings", activeLens, settingsIcon())
 							</nav>
@@ -218,6 +220,12 @@ templ settingsIcon() {
 	<svg class="w-4 h-4 text-warm-faint" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 		<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
 		<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+	</svg>
+}
+
+templ knowledgeIcon() {
+	<svg class="w-4 h-4 text-warm-faint" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+		<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
 	</svg>
 }
 
@@ -1848,4 +1856,110 @@ func lastMessageTS(messages []Node) string {
 		return time.Now().UTC().Format(time.RFC3339Nano)
 	}
 	return messages[len(messages)-1].CreatedAt.Format(time.RFC3339Nano)
+}
+
+// ── Knowledge lens (Layer 6) ────────────────────────────────────
+
+templ KnowledgeView(space Space, spaces []Space, claims []Node, challengeCounts map[string]int, user ViewUser) {
+	@appLayout(space, spaces, "knowledge", user) {
+		<div class="p-6 md:p-8 space-y-6">
+			<div class="flex items-center justify-between">
+				<div>
+					<h1 class="text-2xl font-light text-warm">Knowledge</h1>
+					<p class="text-sm text-warm-muted mt-1">Claims with epistemic status — assert what you know, challenge what you doubt</p>
+				</div>
+			</div>
+			<!-- Create claim form -->
+			<form method="POST" action={ templ.SafeURL("/app/" + space.Slug + "/op") } class="bg-surface border border-edge rounded-lg p-5 space-y-3">
+				<input type="hidden" name="op" value="assert"/>
+				<input
+					type="text"
+					name="title"
+					placeholder="State a claim..."
+					required
+					class="w-full px-3 py-2 bg-elevated border border-edge rounded-lg text-sm text-warm placeholder-warm-faint focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent"
+				/>
+				<textarea
+					name="body"
+					placeholder="Evidence or reasoning (optional)"
+					rows="2"
+					class="w-full px-3 py-2 bg-elevated border border-edge rounded-lg text-sm text-warm placeholder-warm-faint focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent resize-none"
+				></textarea>
+				<button type="submit" class="px-4 py-2 bg-brand text-void rounded-lg hover:bg-brand-dark transition-colors text-sm font-medium">
+					Assert claim
+				</button>
+			</form>
+			if len(claims) == 0 {
+				<div class="text-center py-12">
+					<p class="text-warm-muted text-lg">No claims yet</p>
+					<p class="text-warm-faint text-sm mt-2">Be the first to assert a knowledge claim in this space</p>
+				</div>
+			} else {
+				<div class="space-y-3">
+					for _, c := range claims {
+						@KnowledgeCard(c, space.Slug, challengeCounts[c.ID])
+					}
+				</div>
+			}
+		</div>
+	}
+}
+
+templ KnowledgeCard(node Node, spaceSlug string, challenges int) {
+	<div class="p-5 bg-surface rounded-lg border border-edge hover:border-brand/30 transition-all">
+		<div class="flex items-start justify-between gap-3">
+			<div class="flex-1 min-w-0">
+				<div class="flex items-center gap-2 mb-1">
+					@claimStatusBadge(node.State)
+					<a href={ templ.SafeURL(fmt.Sprintf("/app/%s/node/%s", spaceSlug, node.ID)) } class="text-sm font-medium text-warm hover:text-brand transition-colors">
+						{ node.Title }
+					</a>
+				</div>
+				if node.Body != "" {
+					<p class="text-xs text-warm-muted mt-1 line-clamp-2">{ truncate(node.Body, 200) }</p>
+				}
+				<div class="flex items-center gap-3 mt-2 text-xs text-warm-faint">
+					if node.AuthorKind == "agent" {
+						<span class="text-violet-400">{ node.Author }</span>
+					} else {
+						<span>{ node.Author }</span>
+					}
+					<span>{ node.CreatedAt.Format("Jan 2, 2006") }</span>
+					if challenges > 0 {
+						<span class="text-amber-400">{ fmt.Sprintf("%d challenge", challenges) }{ pluralS(challenges) }</span>
+					}
+				</div>
+			</div>
+			<form method="POST" action={ templ.SafeURL("/app/" + spaceSlug + "/op") } class="flex-shrink-0">
+				<input type="hidden" name="op" value="challenge"/>
+				<input type="hidden" name="node_id" value={ node.ID }/>
+				<input type="hidden" name="reason" value="disputed"/>
+				<button type="submit" class="text-xs px-3 py-1.5 bg-amber-500/10 text-amber-400 rounded-lg hover:bg-amber-500/20 transition-colors">
+					Challenge
+				</button>
+			</form>
+		</div>
+	</div>
+}
+
+templ claimStatusBadge(state string) {
+	switch state {
+		case "claimed":
+			<span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-400">claimed</span>
+		case "challenged":
+			<span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400">challenged</span>
+		case "verified":
+			<span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400">verified</span>
+		case "retracted":
+			<span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-red-500/15 text-red-400">retracted</span>
+		default:
+			<span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-warm-faint/20 text-warm-muted">{ state }</span>
+	}
+}
+
+func pluralS(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }

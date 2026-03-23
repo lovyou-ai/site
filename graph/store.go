@@ -44,6 +44,13 @@ const (
 	KindThread       = "thread"
 	KindComment      = "comment"
 	KindConversation = "conversation"
+	KindClaim        = "claim"
+)
+
+// Claim epistemic states.
+const (
+	ClaimClaimed    = "claimed"
+	ClaimChallenged = "challenged"
 )
 
 // Space kinds.
@@ -1520,6 +1527,78 @@ func (s *Store) GetMindState(ctx context.Context, key string) string {
 	var value string
 	s.db.QueryRowContext(ctx, `SELECT value FROM mind_state WHERE key = $1`, key).Scan(&value)
 	return value
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Knowledge (Layer 6)
+// ────────────────────────────────────────────────────────────────────
+
+// KnowledgeClaim is a claim node with challenge count and space info for cross-space display.
+type KnowledgeClaim struct {
+	ID         string    `json:"id"`
+	Title      string    `json:"title"`
+	Body       string    `json:"body"`
+	State      string    `json:"state"`
+	Author     string    `json:"author"`
+	AuthorID   string    `json:"author_id"`
+	AuthorKind string    `json:"author_kind"`
+	SpaceSlug  string    `json:"space_slug"`
+	SpaceName  string    `json:"space_name"`
+	Challenges int       `json:"challenges"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+// ListKnowledgeClaims returns claims from public spaces, optionally filtered by state or query.
+func (s *Store) ListKnowledgeClaims(ctx context.Context, stateFilter, query string, limit int) ([]KnowledgeClaim, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	q := `
+		SELECT n.id, n.title, n.body, n.state, n.author, n.author_id,
+		       COALESCE(u.kind, 'human'), s.slug, s.name,
+		       (SELECT COUNT(*) FROM ops o WHERE o.node_id = n.id AND o.op = 'challenge'),
+		       n.created_at
+		FROM nodes n
+		JOIN spaces s ON s.id = n.space_id AND s.visibility = 'public'
+		LEFT JOIN users u ON u.id = n.author_id
+		WHERE n.kind = 'claim'`
+	args := []any{}
+	argN := 1
+	if stateFilter != "" {
+		q += fmt.Sprintf(" AND n.state = $%d", argN)
+		args = append(args, stateFilter)
+		argN++
+	}
+	if query != "" {
+		q += fmt.Sprintf(" AND (n.title ILIKE '%%' || $%d || '%%' OR n.body ILIKE '%%' || $%d || '%%')", argN, argN)
+		args = append(args, query)
+		argN++
+	}
+	q += fmt.Sprintf(" ORDER BY n.created_at DESC LIMIT $%d", argN)
+	args = append(args, limit)
+
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var claims []KnowledgeClaim
+	for rows.Next() {
+		var c KnowledgeClaim
+		if err := rows.Scan(&c.ID, &c.Title, &c.Body, &c.State, &c.Author, &c.AuthorID,
+			&c.AuthorKind, &c.SpaceSlug, &c.SpaceName, &c.Challenges, &c.CreatedAt); err != nil {
+			return nil, err
+		}
+		claims = append(claims, c)
+	}
+	return claims, rows.Err()
+}
+
+// CountChallenges returns the number of challenge ops for a given node.
+func (s *Store) CountChallenges(ctx context.Context, nodeID string) int {
+	var count int
+	s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM ops WHERE node_id = $1 AND op = 'challenge'`, nodeID).Scan(&count)
+	return count
 }
 
 // ────────────────────────────────────────────────────────────────────

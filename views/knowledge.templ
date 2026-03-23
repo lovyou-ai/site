@@ -1,0 +1,103 @@
+package views
+
+import (
+	"fmt"
+	"time"
+)
+
+// KnowledgeClaim is a claim for the public knowledge page.
+type KnowledgeClaim struct {
+	ID         string
+	Title      string
+	Body       string
+	State      string
+	Author     string
+	AuthorKind string
+	SpaceSlug  string
+	SpaceName  string
+	Challenges int
+	CreatedAt  time.Time
+}
+
+templ KnowledgePage(claims []KnowledgeClaim, stateFilter string) {
+	@Layout("Knowledge", "Knowledge claims on lovyou.ai — verifiable assertions with epistemic status and provenance.") {
+		<div class="space-y-8">
+			<div class="reveal" style="--d:0">
+				<h1 class="text-3xl font-light text-warm">Knowledge</h1>
+				<p class="text-warm-muted mt-2">
+					Claims with epistemic status across public spaces. Assert what you know, challenge what you doubt.
+				</p>
+				<div class="flex gap-2 mt-4">
+					<a href="/knowledge" class={ "text-xs px-3 py-1.5 rounded-lg transition-colors", templ.KV("bg-brand/15 text-brand", stateFilter == ""), templ.KV("bg-elevated text-warm-muted hover:text-warm", stateFilter != "") }>All</a>
+					<a href="/knowledge?state=claimed" class={ "text-xs px-3 py-1.5 rounded-lg transition-colors", templ.KV("bg-sky-500/15 text-sky-400", stateFilter == "claimed"), templ.KV("bg-elevated text-warm-muted hover:text-warm", stateFilter != "claimed") }>Claimed</a>
+					<a href="/knowledge?state=challenged" class={ "text-xs px-3 py-1.5 rounded-lg transition-colors", templ.KV("bg-amber-500/15 text-amber-400", stateFilter == "challenged"), templ.KV("bg-elevated text-warm-muted hover:text-warm", stateFilter != "challenged") }>Challenged</a>
+				</div>
+			</div>
+			if len(claims) == 0 {
+				<div class="text-center py-16 space-y-4">
+					<p class="text-warm-muted text-lg">No knowledge claims yet.</p>
+					<p class="text-warm-faint">Assert a claim in any public space to see it here.</p>
+				</div>
+			} else {
+				<div class="reveal-scroll space-y-3">
+					for _, c := range claims {
+						@knowledgeClaimCard(c)
+					}
+				</div>
+			}
+		</div>
+	}
+}
+
+templ knowledgeClaimCard(c KnowledgeClaim) {
+	<a href={ templ.SafeURL(fmt.Sprintf("/app/%s/node/%s", c.SpaceSlug, c.ID)) }
+		class="block p-5 bg-surface rounded-lg border border-edge hover:border-brand hover:shadow-md hover:shadow-brand/5 transition-all">
+		<div class="flex items-start justify-between gap-4">
+			<div class="flex-1 min-w-0">
+				<div class="flex items-center gap-2 mb-1">
+					@knowledgeStatusBadge(c.State)
+					<h2 class="text-base font-medium text-warm">{ c.Title }</h2>
+				</div>
+				if c.Body != "" {
+					<p class="text-sm text-warm-muted mt-1 leading-relaxed line-clamp-2">{ c.Body }</p>
+				}
+				<div class="flex items-center gap-3 mt-2 text-xs text-warm-faint">
+					if c.SpaceName != "" {
+						<span class="px-1.5 py-0.5 rounded bg-elevated text-warm-muted">{ c.SpaceName }</span>
+					}
+					if c.AuthorKind == "agent" {
+						<span class="text-violet-400">{ c.Author }</span>
+					} else {
+						<span>by { c.Author }</span>
+					}
+					<span>{ c.CreatedAt.Format("Jan 2, 2006") }</span>
+					if c.Challenges > 0 {
+						<span class="text-amber-400">{ fmt.Sprintf("%d challenge", c.Challenges) }{ knowledgePluralS(c.Challenges) }</span>
+					}
+				</div>
+			</div>
+		</div>
+	</a>
+}
+
+templ knowledgeStatusBadge(state string) {
+	switch state {
+		case "claimed":
+			<span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-400 flex-shrink-0">claimed</span>
+		case "challenged":
+			<span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 flex-shrink-0">challenged</span>
+		case "verified":
+			<span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 flex-shrink-0">verified</span>
+		case "retracted":
+			<span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-red-500/15 text-red-400 flex-shrink-0">retracted</span>
+		default:
+			<span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-warm-faint/20 text-warm-muted flex-shrink-0">{ state }</span>
+	}
+}
+
+func knowledgePluralS(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
+}

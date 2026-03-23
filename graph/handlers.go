@@ -71,6 +71,7 @@ func (h *Handlers) Register(mux *http.ServeMux) {
 	mux.Handle("GET /app/{slug}/conversations", h.readWrap(h.handleConversations))
 	mux.Handle("GET /app/{slug}/people", h.readWrap(h.handlePeople))
 	mux.Handle("GET /app/{slug}/activity", h.readWrap(h.handleActivity))
+	mux.Handle("GET /app/{slug}/knowledge", h.readWrap(h.handleKnowledge))
 
 	// Conversation detail (optional auth).
 	mux.Handle("GET /app/{slug}/conversation/{id}", h.readWrap(h.handleConversationDetail))
@@ -593,6 +594,43 @@ func (h *Handlers) handleActivity(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ActivityView(*space, spaces, ops, h.viewUser(r)).Render(r.Context(), w)
+}
+
+func (h *Handlers) handleKnowledge(w http.ResponseWriter, r *http.Request) {
+	space, _, err := h.spaceForRead(r)
+	if errors.Is(err, ErrNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	spaces, _ := h.store.ListSpaces(r.Context(), h.userID(r))
+
+	claims, err := h.store.ListNodes(r.Context(), ListNodesParams{
+		SpaceID:  space.ID,
+		Kind:     KindClaim,
+		ParentID: "root",
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Count challenges per claim.
+	challengeCounts := make(map[string]int, len(claims))
+	for _, c := range claims {
+		challengeCounts[c.ID] = h.store.CountChallenges(r.Context(), c.ID)
+	}
+
+	if wantsJSON(r) {
+		writeJSON(w, http.StatusOK, map[string]any{"space": space, "claims": claims})
+		return
+	}
+
+	KnowledgeView(*space, spaces, claims, challengeCounts, h.viewUser(r)).Render(r.Context(), w)
 }
 
 // ────────────────────────────────────────────────────────────────────
@@ -1177,6 +1215,61 @@ func (h *Handlers) handleOp(w http.ResponseWriter, r *http.Request) {
 		if wantsJSON(r) {
 			node, _ := h.store.GetNode(ctx, nodeID)
 			writeJSON(w, http.StatusOK, map[string]any{"node": node, "op": "depend"})
+			return
+		}
+		http.Redirect(w, r, fmt.Sprintf("/app/%s/node/%s", space.Slug, nodeID), http.StatusSeeOther)
+
+	case "assert":
+		title := strings.TrimSpace(r.FormValue("title"))
+		body := strings.TrimSpace(r.FormValue("body"))
+		if title == "" {
+			http.Error(w, "title required", http.StatusBadRequest)
+			return
+		}
+		node, err := h.store.CreateNode(ctx, CreateNodeParams{
+			SpaceID:    space.ID,
+			Kind:       KindClaim,
+			Title:      title,
+			Body:       body,
+			State:      ClaimClaimed,
+			Author:     actor,
+			AuthorID:   actorID,
+			AuthorKind: actorKind,
+		})
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		h.store.RecordOp(ctx, space.ID, node.ID, actor, actorID, "assert", nil)
+
+		if wantsJSON(r) {
+			writeJSON(w, http.StatusCreated, map[string]any{"node": node, "op": "assert"})
+			return
+		}
+		if isHTMX(r) {
+			KnowledgeCard(*node, space.Slug, 0).Render(ctx, w)
+			return
+		}
+		http.Redirect(w, r, "/app/"+space.Slug+"/knowledge", http.StatusSeeOther)
+
+	case "challenge":
+		nodeID := r.FormValue("node_id")
+		reason := strings.TrimSpace(r.FormValue("reason"))
+		if nodeID == "" {
+			http.Error(w, "node_id required", http.StatusBadRequest)
+			return
+		}
+		if reason == "" {
+			reason = "challenged"
+		}
+		payload, _ := json.Marshal(map[string]string{"reason": reason})
+		h.store.RecordOp(ctx, space.ID, nodeID, actor, actorID, "challenge", payload)
+
+		// Update claim state to challenged.
+		h.store.UpdateNodeState(ctx, nodeID, ClaimChallenged)
+
+		if wantsJSON(r) {
+			writeJSON(w, http.StatusOK, map[string]string{"op": "challenge", "status": "recorded"})
 			return
 		}
 		http.Redirect(w, r, fmt.Sprintf("/app/%s/node/%s", space.Slug, nodeID), http.StatusSeeOther)
