@@ -454,6 +454,9 @@ templ dashboardTaskCard(t DashboardTask) {
 						<span class="text-[10px] text-warm-faint">due { t.DueDate.Format("Jan 2") }</span>
 					}
 				}
+				if t.BlockerCount > 0 {
+					<span class="text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400">{ fmt.Sprintf("%d blocked", t.BlockerCount) }</span>
+				}
 			</div>
 		</div>
 		<span class={ "text-[10px] font-medium px-1.5 py-0.5 rounded-full", dashboardStateClass(t.State) }>{ t.State }</span>
@@ -2103,7 +2106,7 @@ templ NodeDetailView(space Space, node Node, children []Node, ops []Op, user Vie
 			}
 
 			<!-- Edit form -->
-			if node.Kind == KindTask && isOwner {
+			if isOwner && node.Kind != KindComment && node.Kind != KindConversation {
 				<div>
 					<button onclick="document.getElementById('edit-form').classList.toggle('hidden')" class="text-sm text-brand hover:underline">Edit</button>
 					<form id="edit-form" method="POST" action={ templ.SafeURL(fmt.Sprintf("/app/%s/node/%s/update", space.Slug, node.ID)) } class="hidden mt-3 bg-surface rounded-lg border border-edge p-4 space-y-3">
@@ -2112,24 +2115,32 @@ templ NodeDetailView(space Space, node Node, children []Node, ops []Op, user Vie
 							<input type="text" name="title" value={ node.Title } class="w-full px-3 py-2 bg-elevated border border-edge rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent text-sm text-warm"/>
 						</div>
 						<div>
-							<label class="block text-xs font-medium text-warm-muted mb-1">Description</label>
+							<label class="block text-xs font-medium text-warm-muted mb-1">
+								if node.Kind == KindTask {
+									Description
+								} else {
+									Body
+								}
+							</label>
 							<textarea name="body" rows="4" class="w-full px-3 py-2 bg-elevated border border-edge rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent text-sm text-warm">{ node.Body }</textarea>
 						</div>
-						<div class="grid grid-cols-2 gap-3">
-							<div>
-								<label class="block text-xs font-medium text-warm-muted mb-1">Priority</label>
-								<select name="priority" class="w-full px-3 py-2 bg-elevated border border-edge rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand text-warm-secondary">
-									<option value="low" selected?={ node.Priority == PriorityLow }>Low</option>
-									<option value="medium" selected?={ node.Priority == PriorityMedium }>Medium</option>
-									<option value="high" selected?={ node.Priority == PriorityHigh }>High</option>
-									<option value="urgent" selected?={ node.Priority == PriorityUrgent }>Urgent</option>
-								</select>
+						if node.Kind == KindTask {
+							<div class="grid grid-cols-2 gap-3">
+								<div>
+									<label class="block text-xs font-medium text-warm-muted mb-1">Priority</label>
+									<select name="priority" class="w-full px-3 py-2 bg-elevated border border-edge rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand text-warm-secondary">
+										<option value="low" selected?={ node.Priority == PriorityLow }>Low</option>
+										<option value="medium" selected?={ node.Priority == PriorityMedium }>Medium</option>
+										<option value="high" selected?={ node.Priority == PriorityHigh }>High</option>
+										<option value="urgent" selected?={ node.Priority == PriorityUrgent }>Urgent</option>
+									</select>
+								</div>
+								<div>
+									<label class="block text-xs font-medium text-warm-muted mb-1">Assignee</label>
+									<input type="text" name="assignee" value={ node.Assignee } class="w-full px-3 py-2 bg-elevated border border-edge rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent text-sm text-warm" placeholder="Unassigned"/>
+								</div>
 							</div>
-							<div>
-								<label class="block text-xs font-medium text-warm-muted mb-1">Assignee</label>
-								<input type="text" name="assignee" value={ node.Assignee } class="w-full px-3 py-2 bg-elevated border border-edge rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent text-sm text-warm" placeholder="Unassigned"/>
-							</div>
-						</div>
+						}
 						<button type="submit" class="px-4 py-2 bg-brand text-void rounded-lg hover:bg-brand-dark transition-colors text-sm font-medium">Save changes</button>
 					</form>
 				</div>
