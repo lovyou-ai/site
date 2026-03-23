@@ -947,7 +947,14 @@ func (h *Handlers) handleOp(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		h.store.RecordOp(ctx, space.ID, node.ID, actor, actorID, "decompose", nil)
+		op, _ := h.store.RecordOp(ctx, space.ID, node.ID, actor, actorID, "decompose", nil)
+
+		// Notify parent task author when an agent decomposes their task.
+		if actorKind == "agent" && op != nil {
+			if parent, _ := h.store.GetNode(ctx, parentID); parent != nil && parent.AuthorID != actorID {
+				h.notify(ctx, parent.AuthorID, actor, op.ID, space.ID, "broke down your task: "+parent.Title)
+			}
+		}
 
 		if wantsJSON(r) {
 			writeJSON(w, http.StatusCreated, map[string]any{"node": node, "op": "decompose"})
@@ -1084,7 +1091,14 @@ func (h *Handlers) handleOp(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		h.store.RecordOp(ctx, space.ID, nodeID, actor, actorID, "complete", nil)
+		op, _ := h.store.RecordOp(ctx, space.ID, nodeID, actor, actorID, "complete", nil)
+
+		// Notify task author when an agent completes their task.
+		if actorKind == "agent" && op != nil {
+			if node, _ := h.store.GetNode(ctx, nodeID); node != nil && node.AuthorID != actorID {
+				h.notify(ctx, node.AuthorID, actor, op.ID, space.ID, "completed your task: "+node.Title)
+			}
+		}
 
 		if wantsJSON(r) {
 			node, _ := h.store.GetNode(ctx, nodeID)
