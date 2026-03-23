@@ -1132,7 +1132,7 @@ func (s *Store) ListPublicActivity(ctx context.Context, limit int) ([]Op, error)
 
 // ListAvailableTasks returns open, unassigned tasks from public spaces.
 // If query is non-empty, filters by title/body text search.
-func (s *Store) ListAvailableTasks(ctx context.Context, query string, limit int) ([]Node, error) {
+func (s *Store) ListAvailableTasks(ctx context.Context, query, priority string, limit int) ([]Node, error) {
 	if limit <= 0 {
 		limit = 50
 	}
@@ -1149,6 +1149,11 @@ func (s *Store) ListAvailableTasks(ctx context.Context, query string, limit int)
 	if query != "" {
 		baseQuery += fmt.Sprintf(" AND (n.title ILIKE '%%' || $%d || '%%' OR n.body ILIKE '%%' || $%d || '%%')", argN, argN)
 		args = append(args, query)
+		argN++
+	}
+	if priority != "" {
+		baseQuery += fmt.Sprintf(" AND n.priority = $%d", argN)
+		args = append(args, priority)
 		argN++
 	}
 	baseQuery += fmt.Sprintf(" ORDER BY n.priority = 'urgent' DESC, n.priority = 'high' DESC, n.created_at DESC LIMIT $%d", argN)

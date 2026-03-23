@@ -446,7 +446,7 @@ func TestAvailableTasks(t *testing.T) {
 		Author: "tester", AuthorID: "tester-id", State: StateOpen, Assignee: "someone",
 	})
 
-	tasks, err := store.ListAvailableTasks(ctx, "", 50)
+	tasks, err := store.ListAvailableTasks(ctx, "", "", 50)
 	if err != nil {
 		t.Fatalf("list available: %v", err)
 	}
@@ -465,11 +465,11 @@ func TestAvailableTasks(t *testing.T) {
 	}
 
 	// Search.
-	tasks, _ = store.ListAvailableTasks(ctx, "Available", 50)
+	tasks, _ = store.ListAvailableTasks(ctx, "Available", "", 50)
 	if len(tasks) == 0 {
 		t.Error("search should find the task")
 	}
-	tasks, _ = store.ListAvailableTasks(ctx, "nonexistent", 50)
+	tasks, _ = store.ListAvailableTasks(ctx, "nonexistent", "", 50)
 	for _, task := range tasks {
 		if task.Title == "Available Task" {
 			t.Error("search for nonexistent should not find the task")

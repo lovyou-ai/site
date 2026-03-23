@@ -13,7 +13,7 @@ type MarketTask struct {
 	Author    string
 }
 
-templ MarketPage(tasks []MarketTask) {
+templ MarketPage(tasks []MarketTask, priorityFilter string) {
 	@Layout("Market", "Available work on lovyou.ai — tasks you can claim and work on, or assign to an AI agent.") {
 		<div class="space-y-8">
 			<div class="reveal" style="--d:0">
@@ -26,6 +26,13 @@ templ MarketPage(tasks []MarketTask) {
 					<input type="text" name="q" placeholder="Search tasks..."
 						class="w-full max-w-md text-sm px-3 py-2 bg-elevated border border-edge rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent text-warm placeholder-warm-faint"/>
 				</form>
+				<div class="flex gap-2 mt-3">
+					@marketPriorityTab("", "All", priorityFilter)
+					@marketPriorityTab("urgent", "Urgent", priorityFilter)
+					@marketPriorityTab("high", "High", priorityFilter)
+					@marketPriorityTab("medium", "Medium", priorityFilter)
+					@marketPriorityTab("low", "Low", priorityFilter)
+				</div>
 			</div>
 			if len(tasks) == 0 {
 				<div class="text-center py-16 space-y-4">
@@ -63,6 +70,17 @@ templ marketCard(t MarketTask) {
 				{ t.Priority }
 			</span>
 		</div>
+	</a>
+}
+
+templ marketPriorityTab(value, label, active string) {
+	<a
+		href={ templ.SafeURL("/market?priority=" + value) }
+		class={ "text-xs px-3 py-1.5 rounded-lg transition-colors font-medium",
+			templ.KV("bg-brand/15 text-brand", value == active),
+			templ.KV("bg-elevated text-warm-muted hover:text-warm", value != active) }
+	>
+		{ label }
 	</a>
 }
 

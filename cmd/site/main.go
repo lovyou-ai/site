@@ -431,11 +431,12 @@ func main() {
 	// Market — available tasks across public spaces.
 	mux.HandleFunc("GET /market", func(w http.ResponseWriter, r *http.Request) {
 		if graphStore == nil {
-			views.MarketPage(nil).Render(r.Context(), w)
+			views.MarketPage(nil, "").Render(r.Context(), w)
 			return
 		}
 		query := r.URL.Query().Get("q")
-		nodes, err := graphStore.ListAvailableTasks(r.Context(), query, 50)
+		priority := r.URL.Query().Get("priority")
+		nodes, err := graphStore.ListAvailableTasks(r.Context(), query, priority, 50)
 		if err != nil {
 			log.Printf("market: %v", err)
 		}
@@ -452,7 +453,7 @@ func main() {
 				Body: n.Body, Priority: n.Priority, Author: n.Author,
 			})
 		}
-		views.MarketPage(tasks).Render(r.Context(), w)
+		views.MarketPage(tasks, priority).Render(r.Context(), w)
 	})
 
 	// Knowledge page — claims across public spaces (Layer 6).
