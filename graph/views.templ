@@ -1375,10 +1375,17 @@ templ chatMessage(msg Node, currentUserID string) {
 
 // ── People view ─────────────────────────────────────────────────
 
-templ PeopleView(space Space, spaces []Space, members []Member, user ViewUser) {
+templ PeopleView(space Space, spaces []Space, members []Member, user ViewUser, searchQuery string) {
 	@appLayout(space, spaces, "people", user) {
 		<div class="max-w-2xl mx-auto p-6 space-y-6">
 			<h1 class="text-xl font-medium text-warm">People</h1>
+			<form action={ templ.SafeURL("/app/" + space.Slug + "/people") } method="GET" class="flex gap-2">
+				<input type="text" name="q" value={ searchQuery } placeholder="Search people..."
+					class="flex-1 px-3 py-1.5 bg-elevated border border-edge rounded-lg text-xs text-warm placeholder-warm-faint focus:outline-none focus:ring-1 focus:ring-brand"/>
+				if searchQuery != "" {
+					<a href={ templ.SafeURL("/app/" + space.Slug + "/people") } class="text-xs text-warm-faint hover:text-brand transition-colors flex items-center px-2">Clear</a>
+				}
+			</form>
 			<div class="bg-surface rounded-lg border border-edge overflow-hidden">
 				<div class="grid grid-cols-[1fr_5rem_5rem] gap-3 px-4 py-2.5 border-b border-edge bg-elevated/80 text-[10px] font-semibold text-warm-faint uppercase tracking-wider">
 					<div>Member</div>

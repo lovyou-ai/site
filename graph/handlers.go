@@ -701,8 +701,12 @@ func (h *Handlers) handlePeople(w http.ResponseWriter, r *http.Request) {
 		m.OpCount++
 		m.LastSeen = o.CreatedAt.Format("Jan 2")
 	}
+	searchQuery := r.URL.Query().Get("q")
 	var members []Member
 	for _, m := range memberMap {
+		if searchQuery != "" && !strings.Contains(strings.ToLower(m.Name), strings.ToLower(searchQuery)) {
+			continue
+		}
 		members = append(members, *m)
 	}
 
@@ -711,7 +715,7 @@ func (h *Handlers) handlePeople(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	PeopleView(*space, spaces, members, h.viewUser(r)).Render(r.Context(), w)
+	PeopleView(*space, spaces, members, h.viewUser(r), searchQuery).Render(r.Context(), w)
 }
 
 func (h *Handlers) handleActivity(w http.ResponseWriter, r *http.Request) {
