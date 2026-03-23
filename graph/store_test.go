@@ -477,6 +477,244 @@ func TestAvailableTasks(t *testing.T) {
 	}
 }
 
+func TestEndorsements(t *testing.T) {
+	_, store := testDB(t)
+	ctx := context.Background()
+
+	// No endorsements initially.
+	if store.CountEndorsements(ctx, "user-b") != 0 {
+		t.Error("should have 0 endorsements initially")
+	}
+	if store.HasEndorsed(ctx, "user-a", "user-b") {
+		t.Error("should not have endorsed initially")
+	}
+
+	// Endorse.
+	if err := store.Endorse(ctx, "user-a", "user-b"); err != nil {
+		t.Fatalf("endorse: %v", err)
+	}
+	if !store.HasEndorsed(ctx, "user-a", "user-b") {
+		t.Error("should have endorsed after Endorse")
+	}
+	if store.CountEndorsements(ctx, "user-b") != 1 {
+		t.Errorf("endorsement count = %d, want 1", store.CountEndorsements(ctx, "user-b"))
+	}
+
+	// Duplicate endorse is a no-op.
+	store.Endorse(ctx, "user-a", "user-b")
+	if store.CountEndorsements(ctx, "user-b") != 1 {
+		t.Errorf("endorsement count after duplicate = %d, want 1", store.CountEndorsements(ctx, "user-b"))
+	}
+
+	// Unendorse.
+	store.Unendorse(ctx, "user-a", "user-b")
+	if store.HasEndorsed(ctx, "user-a", "user-b") {
+		t.Error("should not have endorsed after Unendorse")
+	}
+	if store.CountEndorsements(ctx, "user-b") != 0 {
+		t.Errorf("endorsement count after unendorse = %d, want 0", store.CountEndorsements(ctx, "user-b"))
+	}
+}
+
+func TestReportsAndResolve(t *testing.T) {
+	_, store := testDB(t)
+	ctx := context.Background()
+
+	space, _ := store.CreateSpace(ctx, "test-reports", "Reports Test", "", "owner-1", "project", "public")
+	t.Cleanup(func() { store.DeleteSpace(ctx, space.ID) })
+
+	node, _ := store.CreateNode(ctx, CreateNodeParams{
+		SpaceID: space.ID, Kind: KindPost, Title: "Flagged Post",
+		Author: "author", AuthorID: "author-id",
+	})
+
+	// Report the node.
+	store.RecordOp(ctx, space.ID, node.ID, "reporter", "reporter-id", "report",
+		[]byte(`{"reason":"spam"}`))
+
+	// Should appear in unresolved reports.
+	reports, err := store.ListReports(ctx, space.ID)
+	if err != nil {
+		t.Fatalf("list reports: %v", err)
+	}
+	if len(reports) != 1 {
+		t.Fatalf("got %d reports, want 1", len(reports))
+	}
+	if reports[0].NodeTitle != "Flagged Post" {
+		t.Errorf("node title = %q, want %q", reports[0].NodeTitle, "Flagged Post")
+	}
+	if reports[0].Reason != "spam" {
+		t.Errorf("reason = %q, want %q", reports[0].Reason, "spam")
+	}
+
+	// Resolve the report (dismiss).
+	store.RecordOp(ctx, space.ID, node.ID, "owner", "owner-1", "resolve",
+		[]byte(`{"action":"dismiss"}`))
+
+	// Should no longer appear.
+	reports, _ = store.ListReports(ctx, space.ID)
+	if len(reports) != 0 {
+		t.Errorf("got %d reports after resolve, want 0", len(reports))
+	}
+}
+
+func TestDashboardQueries(t *testing.T) {
+	db, store := testDB(t)
+	ctx := context.Background()
+
+	space, _ := store.CreateSpace(ctx, "test-dash", "Dashboard Test", "", "owner-1", "project", "public")
+	t.Cleanup(func() { store.DeleteSpace(ctx, space.ID) })
+
+	// Create a user for assignee resolution.
+	db.ExecContext(ctx, `INSERT INTO users (id, google_id, email, name, kind)
+		VALUES ('dash-user', 'google:dash', 'dash@test.com', 'DashUser', 'human')
+		ON CONFLICT (google_id) DO NOTHING`)
+	t.Cleanup(func() { db.ExecContext(ctx, `DELETE FROM users WHERE id = 'dash-user'`) })
+
+	// Create a task assigned to the user.
+	store.CreateNode(ctx, CreateNodeParams{
+		SpaceID: space.ID, Kind: KindTask, Title: "My Task",
+		Author: "other", AuthorID: "other-id", Assignee: "DashUser", AssigneeID: "dash-user",
+	})
+	// Create a task by the user (author).
+	store.CreateNode(ctx, CreateNodeParams{
+		SpaceID: space.ID, Kind: KindTask, Title: "Authored Task",
+		Author: "DashUser", AuthorID: "dash-user",
+	})
+	// Create a done task (should not appear).
+	node, _ := store.CreateNode(ctx, CreateNodeParams{
+		SpaceID: space.ID, Kind: KindTask, Title: "Done Task",
+		Author: "DashUser", AuthorID: "dash-user",
+	})
+	store.UpdateNodeState(ctx, node.ID, StateDone)
+
+	tasks, err := store.ListUserTasks(ctx, "dash-user", 50)
+	if err != nil {
+		t.Fatalf("list user tasks: %v", err)
+	}
+	if len(tasks) != 2 {
+		t.Errorf("got %d tasks, want 2 (assigned + authored)", len(tasks))
+	}
+	for _, task := range tasks {
+		if task.Title == "Done Task" {
+			t.Error("done task should not appear in dashboard")
+		}
+		if task.SpaceName != "Dashboard Test" {
+			t.Errorf("space name = %q, want %q", task.SpaceName, "Dashboard Test")
+		}
+	}
+
+	// User conversations.
+	store.CreateNode(ctx, CreateNodeParams{
+		SpaceID: space.ID, Kind: KindConversation, Title: "My Chat",
+		Author: "DashUser", AuthorID: "dash-user", Tags: []string{"dash-user", "other-id"},
+	})
+
+	convos, err := store.ListUserConversations(ctx, "dash-user", 50)
+	if err != nil {
+		t.Fatalf("list user conversations: %v", err)
+	}
+	if len(convos) != 1 {
+		t.Errorf("got %d conversations, want 1", len(convos))
+	}
+}
+
+func TestSearch(t *testing.T) {
+	_, store := testDB(t)
+	ctx := context.Background()
+
+	space, _ := store.CreateSpace(ctx, "test-search", "Searchable Space", "find me", "owner-1", "project", "public")
+	t.Cleanup(func() { store.DeleteSpace(ctx, space.ID) })
+
+	store.CreateNode(ctx, CreateNodeParams{
+		SpaceID: space.ID, Kind: KindPost, Title: "Findable Post",
+		Body: "unique content xyz123", Author: "tester", AuthorID: "tester-id",
+	})
+
+	// Search spaces by name.
+	results := store.Search(ctx, "Searchable", 10)
+	if len(results.Spaces) == 0 {
+		t.Error("should find space by name")
+	}
+
+	// Search nodes by body.
+	results = store.Search(ctx, "xyz123", 10)
+	if len(results.Nodes) == 0 {
+		t.Error("should find node by body content")
+	}
+
+	// No results for nonsense.
+	results = store.Search(ctx, "zzzznotfound9999", 10)
+	if len(results.Spaces) != 0 || len(results.Nodes) != 0 {
+		t.Error("should find nothing for nonsense query")
+	}
+
+	// Empty query returns nothing.
+	results = store.Search(ctx, "", 10)
+	if len(results.Spaces) != 0 || len(results.Nodes) != 0 {
+		t.Error("empty query should return nothing")
+	}
+}
+
+func TestKnowledgeClaims(t *testing.T) {
+	_, store := testDB(t)
+	ctx := context.Background()
+
+	space, _ := store.CreateSpace(ctx, "test-knowledge", "Knowledge Test", "", "owner-1", "project", "public")
+	t.Cleanup(func() { store.DeleteSpace(ctx, space.ID) })
+
+	// Create a claim.
+	claim, err := store.CreateNode(ctx, CreateNodeParams{
+		SpaceID: space.ID, Kind: KindClaim, Title: "Earth is round",
+		Body: "Verified by observation", Author: "scientist", AuthorID: "sci-id",
+		State: ClaimClaimed,
+	})
+	if err != nil {
+		t.Fatalf("create claim: %v", err)
+	}
+	if claim.Kind != KindClaim {
+		t.Errorf("kind = %q, want %q", claim.Kind, KindClaim)
+	}
+
+	// List claims.
+	claims, err := store.ListKnowledgeClaims(ctx, "", "", 50)
+	if err != nil {
+		t.Fatalf("list claims: %v", err)
+	}
+	found := false
+	for _, c := range claims {
+		if c.ID == claim.ID {
+			found = true
+			if c.Title != "Earth is round" {
+				t.Errorf("title = %q, want %q", c.Title, "Earth is round")
+			}
+		}
+	}
+	if !found {
+		t.Error("should find the claim in ListKnowledgeClaims")
+	}
+
+	// Challenge it.
+	store.RecordOp(ctx, space.ID, claim.ID, "skeptic", "skeptic-id", "challenge",
+		[]byte(`{"reason":"needs evidence"}`))
+	store.UpdateNodeState(ctx, claim.ID, ClaimChallenged)
+
+	// Filter by challenged state.
+	claims, _ = store.ListKnowledgeClaims(ctx, ClaimChallenged, "", 50)
+	found = false
+	for _, c := range claims {
+		if c.ID == claim.ID {
+			found = true
+			if c.Challenges != 1 {
+				t.Errorf("challenges = %d, want 1", c.Challenges)
+			}
+		}
+	}
+	if !found {
+		t.Error("challenged claim should appear in filtered list")
+	}
+}
+
 func TestPublicSpaces(t *testing.T) {
 	_, store := testDB(t)
 	ctx := context.Background()
