@@ -1698,7 +1698,7 @@ templ ChangelogView(space Space, spaces []Space, entries []ChangelogEntry, user 
 
 // ── Governance view ──────────────────────────────────────────────
 
-templ GovernanceView(space Space, spaces []Space, proposals []ProposalWithVotes, user ViewUser, isOwner bool, stateFilter string) {
+templ GovernanceView(space Space, spaces []Space, proposals []ProposalWithVotes, user ViewUser, isOwner bool, stateFilter string, searchQuery string) {
 	@appLayout(space, spaces, "governance", user) {
 		<div class="p-6 md:p-8 space-y-6">
 			<div class="flex items-center justify-between">
@@ -1707,6 +1707,16 @@ templ GovernanceView(space Space, spaces []Space, proposals []ProposalWithVotes,
 					<p class="text-sm text-warm-muted mt-1">Propose changes, vote on decisions — transparent and accountable</p>
 				</div>
 			</div>
+			<form action={ templ.SafeURL("/app/" + space.Slug + "/governance") } method="GET" class="flex gap-2">
+				<input type="text" name="q" value={ searchQuery } placeholder="Search proposals..."
+					class="flex-1 px-3 py-1.5 bg-elevated border border-edge rounded-lg text-xs text-warm placeholder-warm-faint focus:outline-none focus:ring-1 focus:ring-brand"/>
+				if stateFilter != "" {
+					<input type="hidden" name="state" value={ stateFilter }/>
+				}
+				if searchQuery != "" {
+					<a href={ templ.SafeURL("/app/" + space.Slug + "/governance?state=" + stateFilter) } class="text-xs text-warm-faint hover:text-brand transition-colors flex items-center px-2">Clear</a>
+				}
+			</form>
 			<div class="flex gap-2">
 				@govStateTab(space.Slug, "", "All", stateFilter)
 				@govStateTab(space.Slug, "open", "Open", stateFilter)
@@ -2690,7 +2700,7 @@ func lastMessageTS(messages []Node) string {
 
 // ── Knowledge lens (Layer 6) ────────────────────────────────────
 
-templ KnowledgeView(space Space, spaces []Space, claims []Node, challengeCounts map[string]int, user ViewUser) {
+templ KnowledgeView(space Space, spaces []Space, claims []Node, challengeCounts map[string]int, user ViewUser, searchQuery string) {
 	@appLayout(space, spaces, "knowledge", user) {
 		<div class="p-6 md:p-8 space-y-6">
 			<div class="flex items-center justify-between">
@@ -2699,6 +2709,13 @@ templ KnowledgeView(space Space, spaces []Space, claims []Node, challengeCounts 
 					<p class="text-sm text-warm-muted mt-1">Claims with epistemic status — assert what you know, challenge what you doubt</p>
 				</div>
 			</div>
+			<form action={ templ.SafeURL("/app/" + space.Slug + "/knowledge") } method="GET" class="flex gap-2">
+				<input type="text" name="q" value={ searchQuery } placeholder="Search claims..."
+					class="flex-1 px-3 py-1.5 bg-elevated border border-edge rounded-lg text-xs text-warm placeholder-warm-faint focus:outline-none focus:ring-1 focus:ring-brand"/>
+				if searchQuery != "" {
+					<a href={ templ.SafeURL("/app/" + space.Slug + "/knowledge") } class="text-xs text-warm-faint hover:text-brand transition-colors flex items-center px-2">Clear</a>
+				}
+			</form>
 			<!-- Create claim form -->
 			<form method="POST" action={ templ.SafeURL("/app/" + space.Slug + "/op") } class="bg-surface border border-edge rounded-lg p-5 space-y-3">
 				<input type="hidden" name="op" value="assert"/>

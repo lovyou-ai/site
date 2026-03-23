@@ -754,10 +754,12 @@ func (h *Handlers) handleKnowledge(w http.ResponseWriter, r *http.Request) {
 
 	spaces, _ := h.store.ListSpaces(r.Context(), h.userID(r))
 
+	searchQuery := r.URL.Query().Get("q")
 	claims, err := h.store.ListNodes(r.Context(), ListNodesParams{
 		SpaceID:  space.ID,
 		Kind:     KindClaim,
 		ParentID: "root",
+		Query:    searchQuery,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -775,7 +777,7 @@ func (h *Handlers) handleKnowledge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	KnowledgeView(*space, spaces, claims, challengeCounts, h.viewUser(r)).Render(r.Context(), w)
+	KnowledgeView(*space, spaces, claims, challengeCounts, h.viewUser(r), searchQuery).Render(r.Context(), w)
 }
 
 func (h *Handlers) handleChangelog(w http.ResponseWriter, r *http.Request) {
@@ -817,10 +819,21 @@ func (h *Handlers) handleGovernance(w http.ResponseWriter, r *http.Request) {
 
 	spaces, _ := h.store.ListSpaces(r.Context(), h.userID(r))
 	stateFilter := r.URL.Query().Get("state")
+	searchQuery := r.URL.Query().Get("q")
 	proposals, err := h.store.ListProposals(r.Context(), space.ID, stateFilter, 50)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+	if searchQuery != "" {
+		var filtered []ProposalWithVotes
+		sq := strings.ToLower(searchQuery)
+		for _, p := range proposals {
+			if strings.Contains(strings.ToLower(p.Title), sq) || strings.Contains(strings.ToLower(p.Body), sq) {
+				filtered = append(filtered, p)
+			}
+		}
+		proposals = filtered
 	}
 
 	if wantsJSON(r) {
@@ -828,7 +841,7 @@ func (h *Handlers) handleGovernance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	GovernanceView(*space, spaces, proposals, h.viewUser(r), isOwner, stateFilter).Render(r.Context(), w)
+	GovernanceView(*space, spaces, proposals, h.viewUser(r), isOwner, stateFilter, searchQuery).Render(r.Context(), w)
 }
 
 // ────────────────────────────────────────────────────────────────────
