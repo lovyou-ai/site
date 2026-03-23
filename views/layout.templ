@@ -19,6 +19,9 @@ templ Layout(title, description string) {
 			if description != "" {
 				<meta name="twitter:description" content={ description }/>
 			}
+			<link rel="preconnect" href="https://fonts.googleapis.com"/>
+			<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+			<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,600;1,8..60,400&display=swap" rel="stylesheet"/>
 			<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
 			<script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.8/dist/htmx.min.js"></script>
 			<style type="text/tailwindcss">
@@ -38,41 +41,64 @@ templ Layout(title, description string) {
 				}
 			</style>
 			<style>
+				/* Typography */
+				.font-display { font-family: 'Source Serif 4', Georgia, 'Times New Roman', serif; }
+
 				/* Animations */
 				@keyframes breathe {
 					0%, 100% { opacity: 0.8; transform: scale(1); }
 					50% { opacity: 1; transform: scale(1.03); }
 				}
 				@keyframes fadeUp {
-					from { opacity: 0; transform: translateY(12px); }
+					from { opacity: 0; transform: translateY(16px); }
 					to { opacity: 1; transform: translateY(0); }
+				}
+				@keyframes ember-pulse {
+					0%, 100% { opacity: 0.4; }
+					50% { opacity: 0.7; }
 				}
 				.brand-breathe { animation: breathe 4s ease-in-out infinite; }
 				.reveal {
 					opacity: 0;
-					transform: translateY(12px);
-					animation: fadeUp 0.6s ease forwards;
-					animation-delay: calc(var(--d, 0) * 0.15s + 0.1s);
+					transform: translateY(16px);
+					animation: fadeUp 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+					animation-delay: calc(var(--d, 0) * 0.18s + 0.1s);
 				}
 				.reveal-scroll {
 					opacity: 0;
-					transform: translateY(12px);
-					transition: opacity 0.6s ease, transform 0.6s ease;
+					transform: translateY(16px);
+					transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1), transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
 				}
 				.reveal-scroll.in {
 					opacity: 1;
 					transform: translateY(0);
 				}
+				.ember-glow {
+					position: relative;
+				}
+				.ember-glow::before {
+					content: '';
+					position: absolute;
+					top: -120px;
+					left: 50%;
+					transform: translateX(-50%);
+					width: 600px;
+					height: 400px;
+					background: radial-gradient(ellipse, rgba(232, 160, 184, 0.08) 0%, rgba(232, 160, 184, 0.03) 40%, transparent 70%);
+					pointer-events: none;
+					animation: ember-pulse 6s ease-in-out infinite;
+				}
 				@media (prefers-reduced-motion: reduce) {
 					.brand-breathe { animation: none; }
 					.reveal { animation: none; opacity: 1; transform: none; }
 					.reveal-scroll { transition: none; opacity: 1; transform: none; }
+					.ember-glow::before { animation: none; }
 				}
 				/* Prose */
 				.prose { line-height: 1.75; color: #c8c4bc; }
 				.prose p { margin-bottom: 1.25em; }
-				.prose h2 { font-size: 1.5em; font-weight: 700; margin-top: 2em; margin-bottom: 0.75em; color: #f0ede8; }
-				.prose h3 { font-size: 1.25em; font-weight: 600; margin-top: 1.5em; margin-bottom: 0.5em; color: #f0ede8; }
+				.prose h2 { font-family: 'Source Serif 4', Georgia, serif; font-size: 1.5em; font-weight: 600; margin-top: 2em; margin-bottom: 0.75em; color: #f0ede8; }
+				.prose h3 { font-family: 'Source Serif 4', Georgia, serif; font-size: 1.25em; font-weight: 600; margin-top: 1.5em; margin-bottom: 0.5em; color: #f0ede8; }
 				.prose ul, .prose ol { margin: 1em 0; padding-left: 1.5em; }
 				.prose li { margin-bottom: 0.5em; }
 				.prose ul { list-style-type: disc; }
@@ -95,7 +121,7 @@ templ Layout(title, description string) {
 		<body class="bg-void text-warm-secondary min-h-screen flex flex-col">
 			<header class="border-b border-edge bg-surface">
 				<nav class="max-w-4xl mx-auto px-4 md:px-6 py-4 flex items-center justify-between">
-					<a href="/" class="text-xl font-bold text-brand brand-breathe">lovyou.ai</a>
+					<a href="/" class="font-display text-xl font-normal text-brand brand-breathe italic">lovyou.ai</a>
 					<!-- Mobile: compact -->
 					<div class="flex md:hidden gap-3 text-sm text-warm-muted items-center">
 						<a href="/discover" class="hover:text-brand transition-colors">Discover</a>

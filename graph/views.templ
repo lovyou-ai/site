@@ -12,6 +12,9 @@ import (
 // ── Theme block (shared across app layouts) ─────────────────────
 
 templ themeBlock() {
+	<link rel="preconnect" href="https://fonts.googleapis.com"/>
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+	<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,600;1,8..60,400&display=swap" rel="stylesheet"/>
 	<style type="text/tailwindcss">
 		@theme {
 			--color-brand: #e8a0b8;
@@ -29,6 +32,7 @@ templ themeBlock() {
 		}
 	</style>
 	<style>
+		.font-display { font-family: 'Source Serif 4', Georgia, 'Times New Roman', serif; }
 		@keyframes breathe {
 			0%, 100% { opacity: 0.8; transform: scale(1); }
 			50% { opacity: 1; transform: scale(1.03); }
@@ -59,7 +63,7 @@ templ appLayout(space Space, spaces []Space, activeLens string, user ViewUser) {
 			<header class="border-b border-edge bg-surface flex-shrink-0">
 				<nav class="px-4 md:px-6 py-3 flex items-center justify-between">
 					<div class="flex items-center gap-2 md:gap-4 min-w-0">
-						<a href="/" class="text-xl font-bold text-brand brand-breathe flex-shrink-0">lovyou.ai</a>
+						<a href="/" class="font-display text-xl font-normal text-brand brand-breathe flex-shrink-0 italic">lovyou.ai</a>
 						<span class="text-warm-faint hidden md:inline">/</span>
 						<a href="/app" class="text-sm font-medium hover:text-brand transition-colors text-warm-muted hidden md:inline">App</a>
 						<span class="text-warm-faint">/</span>
@@ -275,7 +279,7 @@ templ Dashboard(spaces []Space, tasks []DashboardTask, convos []DashboardConvers
 			@simpleHeader(user)
 			<main class="flex-1 max-w-5xl mx-auto px-6 py-8 w-full">
 				<div class="flex items-center justify-between mb-8">
-					<h1 class="text-2xl font-light text-warm">My Work</h1>
+					<h1 class="font-display text-3xl font-light text-warm">My Work</h1>
 					<div class="flex items-center gap-4">
 						<a href="/app/notifications" class="text-xs text-warm-muted hover:text-brand transition-colors relative">
 							Notifications
@@ -739,7 +743,7 @@ templ BoardView(space Space, spaces []Space, columns []BoardColumn, user ViewUse
 		<div class="p-4 md:p-6 h-full flex flex-col">
 			<div class="flex items-center justify-between mb-4 md:mb-6 gap-2">
 				<div class="flex items-center gap-4 min-w-0">
-					<h1 class="text-lg md:text-xl font-medium text-warm truncate">{ space.Name }</h1>
+					<h1 class="font-display text-xl md:text-2xl font-light text-warm truncate">{ space.Name }</h1>
 					if space.Description != "" {
 						<p class="text-sm text-warm-faint hidden lg:block">{ space.Description }</p>
 					}
@@ -836,19 +840,19 @@ templ boardOnboarding(spaceSlug string, agents []string) {
 
 templ boardColumn(spaceSlug string, col BoardColumn, canWrite bool, agents []string) {
 	<div class="w-[280px] flex-shrink-0 flex flex-col">
-		<div class="flex items-center gap-2 mb-3 px-1">
+		<div class="flex items-center gap-2 mb-3 px-2">
 			<span
-				class="w-2 h-2 rounded-full flex-shrink-0"
+				class="w-1.5 h-5 rounded-full flex-shrink-0"
 				style={ fmt.Sprintf("background-color: %s", stateColorHex(col.State)) }
 			></span>
-			<h2 class="text-sm font-medium text-warm-muted">{ col.Label }</h2>
-			<span class="text-xs text-warm-faint bg-elevated rounded-full px-1.5 py-0.5 min-w-[1.25rem] text-center">
+			<h2 class="text-xs font-semibold text-warm-muted uppercase tracking-wider">{ col.Label }</h2>
+			<span class="text-[10px] text-warm-faint bg-elevated rounded-full px-1.5 py-0.5 min-w-[1.25rem] text-center">
 				{ fmt.Sprintf("%d", len(col.Nodes)) }
 			</span>
 		</div>
 		<div
 			id={ col.State + "-column" }
-			class="flex-1 space-y-2 overflow-y-auto rounded-lg bg-elevated/60 p-2 min-h-[200px]"
+			class="flex-1 space-y-2 overflow-y-auto rounded-xl bg-elevated/40 p-2 min-h-[200px]"
 		>
 			if col.State == StateOpen && canWrite {
 				@newTaskInline(spaceSlug, agents)
@@ -2487,7 +2491,7 @@ templ APIKeysView(keys []ViewAPIKey, user ViewUser) {
 templ simpleHeader(user ViewUser) {
 	<header class="border-b border-edge bg-surface">
 		<nav class="max-w-4xl mx-auto px-4 md:px-6 py-4 flex items-center justify-between">
-			<a href="/" class="text-xl font-bold text-brand brand-breathe">lovyou.ai</a>
+			<a href="/" class="font-display text-xl font-normal text-brand brand-breathe italic">lovyou.ai</a>
 			<!-- Mobile: compact links -->
 			<div class="flex md:hidden items-center gap-4 text-sm text-warm-muted">
 				<a href="/app" class="hover:text-brand transition-colors">App</a>
