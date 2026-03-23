@@ -219,9 +219,21 @@ func main() {
 				return
 			}
 			ps := graphStore.GetPlatformStats(r.Context())
+			pubSpaces, _ := graphStore.ListPublicSpaces(r.Context())
+			var featured []views.FeaturedSpace
+			for i, sp := range pubSpaces {
+				if i >= 4 {
+					break
+				}
+				featured = append(featured, views.FeaturedSpace{
+					Slug: sp.Slug, Name: sp.Name, Description: sp.Description,
+					Kind: sp.Kind, NodeCount: sp.NodeCount, HasAgent: sp.HasAgent,
+				})
+			}
 			views.Home(views.HomeStats{
 				Spaces: ps.Spaces, Tasks: ps.Tasks,
 				Users: ps.Users, AgentOps: ps.AgentOps,
+				FeaturedSpaces: featured,
 			}).Render(r.Context(), w)
 		}))
 
