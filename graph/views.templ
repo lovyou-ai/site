@@ -958,7 +958,7 @@ templ NotificationsView(notifs []Notification, user ViewUser) {
 
 // ── Board view (kanban) ─────────────────────────────────────────
 
-templ BoardView(space Space, spaces []Space, columns []BoardColumn, user ViewUser, isOwner bool, agents []string, searchQuery string, assigneeFilter string) {
+templ BoardView(space Space, spaces []Space, columns []BoardColumn, user ViewUser, isOwner bool, agents []string, searchQuery string, assigneeFilter string, projects []Node, projectFilter string) {
 	@appLayout(space, spaces, "board", user) {
 		<div class="p-4 md:p-6 h-full flex flex-col">
 			<div class="flex items-center justify-between mb-4 md:mb-6 gap-2">
@@ -996,6 +996,15 @@ templ BoardView(space Space, spaces []Space, columns []BoardColumn, user ViewUse
 					placeholder="Search tasks..."
 					class="flex-1 px-3 py-1.5 bg-elevated border border-edge rounded-lg text-xs text-warm placeholder-warm-faint focus:outline-none focus:ring-1 focus:ring-brand"
 				/>
+				if len(projects) > 0 {
+					<select name="project" class="px-2 py-1.5 bg-elevated border border-edge rounded-lg text-xs text-warm-secondary focus:outline-none focus:ring-1 focus:ring-brand"
+						onchange="this.form.submit()">
+						<option value="">All projects</option>
+						for _, p := range projects {
+							<option value={ p.ID } selected?={ p.ID == projectFilter }>{ p.Title }</option>
+						}
+					</select>
+				}
 				<select name="assignee" class="px-2 py-1.5 bg-elevated border border-edge rounded-lg text-xs text-warm-secondary focus:outline-none focus:ring-1 focus:ring-brand"
 					onchange="this.form.submit()">
 					<option value="">All assignees</option>
@@ -1481,7 +1490,7 @@ templ ProjectsView(space Space, spaces []Space, projects []Node, user ViewUser, 
 
 // ── List view (table) ───────────────────────────────────────────
 
-templ ListView(space Space, spaces []Space, tasks []Node, user ViewUser, isOwner bool, agents []string, searchQuery string, assigneeFilter string, sortBy string) {
+templ ListView(space Space, spaces []Space, tasks []Node, user ViewUser, isOwner bool, agents []string, searchQuery string, assigneeFilter string, sortBy string, projects []Node, projectFilter string) {
 	@appLayout(space, spaces, "board", user) {
 		<div class="p-4 md:p-6 h-full flex flex-col">
 			<div class="flex items-center justify-between mb-4 gap-2">
@@ -1499,7 +1508,16 @@ templ ListView(space Space, spaces []Space, tasks []Node, user ViewUser, isOwner
 				<input type="hidden" name="view" value="list"/>
 				<input type="text" name="q" value={ searchQuery } placeholder="Search tasks..."
 					class="flex-1 px-3 py-1.5 bg-elevated border border-edge rounded-lg text-xs text-warm placeholder-warm-faint focus:outline-none focus:ring-1 focus:ring-brand"/>
-				if searchQuery != "" || assigneeFilter != "" {
+				if len(projects) > 0 {
+					<select name="project" class="px-2 py-1.5 bg-elevated border border-edge rounded-lg text-xs text-warm-secondary focus:outline-none focus:ring-1 focus:ring-brand"
+						onchange="this.form.submit()">
+						<option value="">All projects</option>
+						for _, p := range projects {
+							<option value={ p.ID } selected?={ p.ID == projectFilter }>{ p.Title }</option>
+						}
+					</select>
+				}
+				if searchQuery != "" || assigneeFilter != "" || projectFilter != "" {
 					<a href={ templ.SafeURL("/app/" + space.Slug + "/board?view=list") } class="px-2 py-1.5 text-xs text-warm-faint hover:text-brand transition-colors flex items-center">Clear</a>
 				}
 			</form>

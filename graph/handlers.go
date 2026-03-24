@@ -615,17 +615,31 @@ func (h *Handlers) handleBoard(w http.ResponseWriter, r *http.Request) {
 
 	spaces, _ := h.store.ListSpaces(r.Context(), h.userID(r))
 
+	// Load projects for filter dropdown.
+	projects, _ := h.store.ListNodes(r.Context(), ListNodesParams{
+		SpaceID:  space.ID,
+		Kind:     KindProject,
+		ParentID: "root",
+	})
+
+	projectFilter := strings.TrimSpace(r.URL.Query().Get("project"))
+
+	// Load tasks — if project filter is set, load children of that project.
+	parentFilter := "root"
+	if projectFilter != "" {
+		parentFilter = projectFilter
+	}
 	tasks, err := h.store.ListNodes(r.Context(), ListNodesParams{
 		SpaceID:  space.ID,
 		Kind:     KindTask,
-		ParentID: "root",
+		ParentID: parentFilter,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// Apply filters from query params.
+	// Apply text/assignee filters.
 	q := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
 	assigneeFilter := strings.TrimSpace(r.URL.Query().Get("assignee"))
 	if q != "" || assigneeFilter != "" {
@@ -654,12 +668,12 @@ func (h *Handlers) handleBoard(w http.ResponseWriter, r *http.Request) {
 	if viewMode == "list" {
 		// Sort tasks for list view.
 		sortTasks(tasks, sortBy)
-		ListView(*space, spaces, tasks, h.viewUser(r), isOwner, agents, q, assigneeFilter, sortBy).Render(r.Context(), w)
+		ListView(*space, spaces, tasks, h.viewUser(r), isOwner, agents, q, assigneeFilter, sortBy, projects, projectFilter).Render(r.Context(), w)
 		return
 	}
 
 	columns := groupByState(tasks)
-	BoardView(*space, spaces, columns, h.viewUser(r), isOwner, agents, q, assigneeFilter).Render(r.Context(), w)
+	BoardView(*space, spaces, columns, h.viewUser(r), isOwner, agents, q, assigneeFilter, projects, projectFilter).Render(r.Context(), w)
 }
 
 func (h *Handlers) handleFeed(w http.ResponseWriter, r *http.Request) {
