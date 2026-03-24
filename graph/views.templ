@@ -1075,13 +1075,20 @@ templ NotificationsView(notifs []Notification, user ViewUser) {
 
 // ── Board view (kanban) ─────────────────────────────────────────
 
-templ gettingStartedChecklist(spaceSlug string, hasTask bool, hasAgentTask bool) {
+templ gettingStartedChecklist(spaceSlug string, hasTask bool, hasAgentTask bool, hasCompletion bool) {
 	<div
 		id="getting-started-checklist"
 		class="fixed top-4 right-4 z-40 w-72 bg-elevated border border-edge rounded-xl shadow-lg shadow-black/20 p-4"
 	>
 		<div class="flex items-center justify-between mb-3">
-			<h3 class="text-sm font-semibold text-warm">Getting Started</h3>
+			<div class="flex items-center gap-2">
+				<h3 class="text-sm font-semibold text-warm">Getting Started</h3>
+				<span
+					id="checklist-badge"
+					class="text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-brand/15 text-brand"
+					data-server-done={ fmt.Sprintf("%d", checklistDoneCount(hasTask, hasAgentTask, hasCompletion)) }
+				>{ fmt.Sprintf("%d/4", checklistDoneCount(hasTask, hasAgentTask, hasCompletion)) }</span>
+			</div>
 			<form method="POST" action={ templ.SafeURL("/app/" + spaceSlug + "/checklist/dismiss") }>
 				<button type="submit" class="text-warm-faint hover:text-warm transition-colors" aria-label="Dismiss">
 					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1122,17 +1129,24 @@ templ gettingStartedChecklist(spaceSlug string, hasTask bool, hasAgentTask bool)
 					<span class="text-xs text-warm">Assign it to your AI colleague</span>
 				}
 			</li>
-			<li class="flex items-start gap-2.5" id="checklist-step-chat">
-				<svg class="w-4 h-4 flex-shrink-0 mt-0.5 step-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<circle cx="12" cy="12" r="9" stroke-width="2"></circle>
-				</svg>
-				<span class="text-xs text-warm step-label">
-					<a href={ templ.SafeURL("/app/" + spaceSlug + "/conversations") } class="text-brand hover:underline font-medium" id="checklist-chat-link">Check Chat</a>
-					<span class="text-warm-muted"> to see their response</span>
-				</span>
+			<li class="flex items-start gap-2.5">
+				if hasCompletion {
+					<svg class="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+					</svg>
+					<span class="text-xs text-warm-muted line-through">See their response</span>
+				} else {
+					<svg class="w-4 h-4 text-warm-faint flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<circle cx="12" cy="12" r="9" stroke-width="2"></circle>
+					</svg>
+					<span class="text-xs text-warm">
+						<a href={ templ.SafeURL("/app/" + spaceSlug + "/conversations") } class="text-brand hover:underline font-medium">Check Chat</a>
+						<span class="text-warm-muted"> to see their response</span>
+					</span>
+				}
 			</li>
 			<li class="flex items-start gap-2.5" id="checklist-step-invite">
-				<svg class="w-4 h-4 flex-shrink-0 mt-0.5 step-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<svg class="w-4 h-4 text-warm-faint flex-shrink-0 mt-0.5 step-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<circle cx="12" cy="12" r="9" stroke-width="2"></circle>
 				</svg>
 				<span class="text-xs text-warm step-label">
@@ -1140,36 +1154,38 @@ templ gettingStartedChecklist(spaceSlug string, hasTask bool, hasAgentTask bool)
 				</span>
 			</li>
 		</ul>
-		<div class="text-[10px] text-warm-faint text-center">Auto-dismisses after visiting 3 sections</div>
 		<script>
 		(function() {
-			var key = 'checklist_nav_' + location.pathname.split('/')[2];
-			var count = parseInt(localStorage.getItem(key) || '0', 10);
-			// Track clicks on Chat and Invite links as navigation
-			var links = document.querySelectorAll('#checklist-chat-link, #checklist-step-invite a');
-			links.forEach(function(link) {
-				link.addEventListener('click', function() {
-					var c = parseInt(localStorage.getItem(key) || '0', 10) + 1;
-					localStorage.setItem(key, c);
-				});
-			});
-			// Mark Chat step as done if visited
-			var chatVisited = localStorage.getItem('checklist_chat_' + location.pathname.split('/')[2]);
-			if (chatVisited) {
-				var step = document.getElementById('checklist-step-chat');
+			var slug = location.pathname.split('/')[2];
+			var badge = document.getElementById('checklist-badge');
+			var serverDone = parseInt(badge.dataset.serverDone, 10);
+			var inviteKey = 'checklist_invite_' + slug;
+			var inviteDone = !!localStorage.getItem(inviteKey);
+
+			function markInviteDone() {
+				var step = document.getElementById('checklist-step-invite');
 				if (step) {
 					step.querySelector('.step-icon').outerHTML = '<svg class="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
 					step.querySelector('.step-label').classList.add('line-through', 'text-warm-muted');
 					step.querySelector('.step-label').classList.remove('text-warm');
 				}
+				badge.textContent = (serverDone + 1) + '/4';
 			}
-			document.getElementById('checklist-chat-link') && document.getElementById('checklist-chat-link').addEventListener('click', function() {
-				localStorage.setItem('checklist_chat_' + location.pathname.split('/')[2], '1');
-			});
-			// Auto-dismiss after 3 navigations
-			if (count >= 3) {
-				var el = document.getElementById('getting-started-checklist');
-				if (el) el.remove();
+
+			if (inviteDone) {
+				markInviteDone();
+			} else {
+				badge.textContent = serverDone + '/4';
+			}
+
+			var inviteLink = document.querySelector('#checklist-step-invite a');
+			if (inviteLink) {
+				inviteLink.addEventListener('click', function() {
+					if (!localStorage.getItem(inviteKey)) {
+						localStorage.setItem(inviteKey, '1');
+						markInviteDone();
+					}
+				});
 			}
 		})();
 		</script>
@@ -1204,13 +1220,13 @@ templ firstCompletionToast(spaceSlug string) {
 	</div>
 }
 
-templ BoardView(space Space, spaces []Space, columns []BoardColumn, user ViewUser, isOwner bool, agents []string, searchQuery string, assigneeFilter string, projects []Node, projectFilter string, showFirstCompletionToast bool, showChecklist bool, hasTask bool, hasAgentTask bool) {
+templ BoardView(space Space, spaces []Space, columns []BoardColumn, user ViewUser, isOwner bool, agents []string, searchQuery string, assigneeFilter string, projects []Node, projectFilter string, showFirstCompletionToast bool, showChecklist bool, hasTask bool, hasAgentTask bool, hasCompletion bool) {
 	@appLayout(space, spaces, "board", user) {
 		if showFirstCompletionToast {
 			@firstCompletionToast(space.Slug)
 		}
 		if showChecklist {
-			@gettingStartedChecklist(space.Slug, hasTask, hasAgentTask)
+			@gettingStartedChecklist(space.Slug, hasTask, hasAgentTask, hasCompletion)
 		}
 		<div class="p-4 md:p-6 h-full flex flex-col">
 			<div class="flex items-center justify-between mb-4 md:mb-6 gap-2">

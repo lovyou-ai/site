@@ -696,8 +696,23 @@ func (h *Handlers) handleBoard(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	hasCompletion := space.FirstCompletionAt != nil
 
-	BoardView(*space, spaces, columns, h.viewUser(r), isOwner, agents, q, assigneeFilter, projects, projectFilter, showFirstCompletionToast, showChecklist, hasTask, hasAgentTask).Render(r.Context(), w)
+	BoardView(*space, spaces, columns, h.viewUser(r), isOwner, agents, q, assigneeFilter, projects, projectFilter, showFirstCompletionToast, showChecklist, hasTask, hasAgentTask, hasCompletion).Render(r.Context(), w)
+}
+
+func checklistDoneCount(hasTask, hasAgentTask, hasCompletion bool) int {
+	n := 0
+	if hasTask {
+		n++
+	}
+	if hasAgentTask {
+		n++
+	}
+	if hasCompletion {
+		n++
+	}
+	return n
 }
 
 func (h *Handlers) handleChecklistDismiss(w http.ResponseWriter, r *http.Request) {
