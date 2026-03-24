@@ -294,6 +294,14 @@ CREATE TABLE IF NOT EXISTS endorsements (
 );
 CREATE INDEX IF NOT EXISTS idx_endorsements_to ON endorsements(to_id);
 
+CREATE TABLE IF NOT EXISTS follows (
+    follower_id TEXT NOT NULL,
+    followed_id TEXT NOT NULL,
+    created_at  TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (follower_id, followed_id)
+);
+CREATE INDEX IF NOT EXISTS idx_follows_followed ON follows(followed_id);
+
 -- Backfill assignee_id from users table where assignee name matches.
 UPDATE nodes SET assignee_id = u.id
 FROM users u WHERE nodes.assignee = u.name AND nodes.assignee_id = '' AND nodes.assignee != '';
@@ -1847,6 +1855,51 @@ func (s *Store) GetBulkUserEndorsements(ctx context.Context, userID string, targ
 		}
 	}
 	return result
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Follows (Layer 3 — Social)
+// ────────────────────────────────────────────────────────────────────
+
+// Follow records that followerID follows followedID.
+func (s *Store) Follow(ctx context.Context, followerID, followedID string) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO follows (follower_id, followed_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+		followerID, followedID)
+	return err
+}
+
+// Unfollow removes a follow relationship.
+func (s *Store) Unfollow(ctx context.Context, followerID, followedID string) error {
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM follows WHERE follower_id = $1 AND followed_id = $2`,
+		followerID, followedID)
+	return err
+}
+
+// IsFollowing checks if followerID follows followedID.
+func (s *Store) IsFollowing(ctx context.Context, followerID, followedID string) bool {
+	var exists bool
+	s.db.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM follows WHERE follower_id = $1 AND followed_id = $2)`,
+		followerID, followedID).Scan(&exists)
+	return exists
+}
+
+// CountFollowers returns how many users follow the given user.
+func (s *Store) CountFollowers(ctx context.Context, userID string) int {
+	var count int
+	s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM follows WHERE followed_id = $1`, userID).Scan(&count)
+	return count
+}
+
+// CountFollowing returns how many users the given user follows.
+func (s *Store) CountFollowing(ctx context.Context, userID string) int {
+	var count int
+	s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM follows WHERE follower_id = $1`, userID).Scan(&count)
+	return count
 }
 
 // ────────────────────────────────────────────────────────────────────

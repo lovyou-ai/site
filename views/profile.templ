@@ -28,6 +28,9 @@ type UserProfile struct {
 	Endorsers       []string // names of people who endorsed this user
 	HasEndorsed     bool     // whether the current viewer has endorsed this user
 	ViewerLoggedIn  bool     // whether there's a logged-in viewer
+	Followers       int
+	Following       int
+	IsFollowing     bool     // whether the current viewer follows this user
 	CompletedWork   []CompletedWork
 	RecentOps       []ActivityItem
 	Spaces          []SpaceMembership
@@ -52,17 +55,34 @@ templ ProfilePage(profile UserProfile) {
 						if profile.Kind == "agent" {
 							<span class="text-xs font-medium px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-400">agent</span>
 						}
-						<span class="text-sm text-warm-muted">{ fmt.Sprintf("%d tasks completed", profile.TasksDone) }</span>
-						<span class="text-sm text-warm-faint">{ fmt.Sprintf("%d actions", profile.OpCount) }</span>
+						<span class="text-sm text-warm-muted">{ fmt.Sprintf("%d followers", profile.Followers) }</span>
+						<span class="text-sm text-warm-faint">{ fmt.Sprintf("%d following", profile.Following) }</span>
 						if profile.Endorsements > 0 {
 							<span class="text-sm text-brand">{ fmt.Sprintf("%d endorsements", profile.Endorsements) }</span>
 						}
 					</div>
 				</div>
 			</div>
-			<!-- Endorse section -->
+			<!-- Follow + Endorse section -->
 			<div class="reveal flex items-center gap-4" style="--d:1">
 				if profile.ViewerLoggedIn {
+					<div id="follow-btn">
+						if profile.IsFollowing {
+							<form method="POST" action={ templ.SafeURL("/user/" + profile.Name + "/follow") }>
+								<input type="hidden" name="action" value="unfollow"/>
+								<button type="submit" class="text-xs px-4 py-2 bg-brand text-void rounded-lg hover:bg-brand-dark transition-colors font-medium">
+									Following
+								</button>
+							</form>
+						} else {
+							<form method="POST" action={ templ.SafeURL("/user/" + profile.Name + "/follow") }>
+								<input type="hidden" name="action" value="follow"/>
+								<button type="submit" class="text-xs px-4 py-2 bg-surface border border-edge text-warm-muted rounded-lg hover:border-brand hover:text-brand transition-colors font-medium">
+									Follow
+								</button>
+							</form>
+						}
+					</div>
 					if profile.HasEndorsed {
 						<form method="POST" action={ templ.SafeURL("/user/" + profile.Name + "/endorse") }>
 							<input type="hidden" name="action" value="unendorse"/>

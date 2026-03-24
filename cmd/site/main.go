@@ -411,9 +411,14 @@ func main() {
 		viewer := auth.UserFromContext(r.Context())
 		viewerLoggedIn := viewer != nil && viewer.ID != "anonymous"
 		hasEndorsed := false
+		isFollowing := false
 		if viewerLoggedIn {
 			hasEndorsed = graphStore.HasEndorsed(r.Context(), viewer.ID, u.ID)
+			isFollowing = graphStore.IsFollowing(r.Context(), viewer.ID, u.ID)
 		}
+		// Follow counts.
+		followers := graphStore.CountFollowers(r.Context(), u.ID)
+		following := graphStore.CountFollowing(r.Context(), u.ID)
 		// Completed work history.
 		completed, _ := graphStore.ListCompletedByUser(r.Context(), u.ID, 10)
 		var completedWork []views.CompletedWork
@@ -434,6 +439,8 @@ func main() {
 			TasksDone: u.TasksDone, OpCount: u.OpCount,
 			Endorsements: endorsements, Endorsers: endorsers,
 			HasEndorsed: hasEndorsed, ViewerLoggedIn: viewerLoggedIn,
+			Followers: followers, Following: following,
+			IsFollowing: isFollowing,
 			CompletedWork: completedWork,
 			RecentOps: recentOps,
 			Spaces: spaces,
@@ -468,6 +475,38 @@ func main() {
 		} else {
 			graphStore.Endorse(r.Context(), viewer.ID, targetID)
 			graphStore.CreateNotification(r.Context(), targetID, "", "", viewer.Name+": endorsed you")
+		}
+		http.Redirect(w, r, "/user/"+name, http.StatusSeeOther)
+	}))
+
+	// Follow/unfollow a user (Layer 3 — Social).
+	mux.Handle("POST /user/{name}/follow", writeWrap(func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("name")
+		if graphStore == nil {
+			http.Error(w, "not available", http.StatusServiceUnavailable)
+			return
+		}
+		viewer := auth.UserFromContext(r.Context())
+		if viewer == nil {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		targetID := graphStore.ResolveUserID(r.Context(), name)
+		if targetID == "" {
+			http.NotFound(w, r)
+			return
+		}
+		// Can't follow yourself.
+		if viewer.ID == targetID {
+			http.Redirect(w, r, "/user/"+name, http.StatusSeeOther)
+			return
+		}
+		action := r.FormValue("action")
+		if action == "unfollow" {
+			graphStore.Unfollow(r.Context(), viewer.ID, targetID)
+		} else {
+			graphStore.Follow(r.Context(), viewer.ID, targetID)
+			graphStore.CreateNotification(r.Context(), targetID, "", "", viewer.Name+": started following you")
 		}
 		http.Redirect(w, r, "/user/"+name, http.StatusSeeOther)
 	}))
