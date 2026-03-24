@@ -2402,6 +2402,100 @@ func (h *Handlers) handleOp(w http.ResponseWriter, r *http.Request) {
 		}
 		http.Redirect(w, r, "/app/"+space.Slug+"/governance", http.StatusSeeOther)
 
+	case "progress":
+		// Submit work for review: active → review, with optional progress note.
+		nodeID := r.FormValue("node_id")
+		body := strings.TrimSpace(r.FormValue("body"))
+		if nodeID == "" {
+			http.Error(w, "node_id required", http.StatusBadRequest)
+			return
+		}
+		node, err := h.store.GetNode(ctx, nodeID)
+		if err != nil || node == nil {
+			http.NotFound(w, r)
+			return
+		}
+		if node.Kind != KindTask {
+			http.Error(w, "progress op only valid for tasks", http.StatusBadRequest)
+			return
+		}
+		if err := h.store.UpdateNodeState(ctx, nodeID, StateReview); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		var progressPayload []byte
+		if body != "" {
+			progressPayload, _ = json.Marshal(map[string]string{"body": body})
+		}
+		op, _ := h.store.RecordOp(ctx, space.ID, nodeID, actor, actorID, "progress", progressPayload)
+		// Notify task author that work is ready for review.
+		if op != nil && node.AuthorID != actorID {
+			h.notify(ctx, node.AuthorID, actor, op.ID, space.ID, "submitted for review: "+node.Title)
+		}
+		if wantsJSON(r) {
+			node, _ := h.store.GetNode(ctx, nodeID)
+			writeJSON(w, http.StatusOK, map[string]any{"node": node, "op": "progress"})
+			return
+		}
+		http.Redirect(w, r, fmt.Sprintf("/app/%s/node/%s", space.Slug, nodeID), http.StatusSeeOther)
+
+	case "review":
+		// Structured review with verdict: approve / revise / reject.
+		nodeID := r.FormValue("node_id")
+		verdict := r.FormValue("verdict") // "approve", "revise", "reject"
+		body := strings.TrimSpace(r.FormValue("body"))
+		if nodeID == "" || (verdict != "approve" && verdict != "revise" && verdict != "reject") {
+			http.Error(w, "node_id and verdict (approve/revise/reject) required", http.StatusBadRequest)
+			return
+		}
+		node, err := h.store.GetNode(ctx, nodeID)
+		if err != nil || node == nil {
+			http.NotFound(w, r)
+			return
+		}
+		if node.Kind != KindTask {
+			http.Error(w, "review op only valid for tasks", http.StatusBadRequest)
+			return
+		}
+		if node.State != StateReview {
+			http.Error(w, "task must be in review state", http.StatusBadRequest)
+			return
+		}
+		var newState string
+		switch verdict {
+		case "approve":
+			newState = StateDone
+		case "revise":
+			newState = StateActive
+		default: // "reject"
+			newState = StateClosed
+		}
+		if err := h.store.UpdateNodeState(ctx, nodeID, newState); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		reviewPayload, _ := json.Marshal(map[string]string{"verdict": verdict, "body": body})
+		op, _ := h.store.RecordOp(ctx, space.ID, nodeID, actor, actorID, "review", reviewPayload)
+		// Notify assignee of review verdict.
+		if op != nil && node.AssigneeID != "" && node.AssigneeID != actorID {
+			var msg string
+			switch verdict {
+			case "approve":
+				msg = "approved your task: " + node.Title
+			case "revise":
+				msg = "requested revisions on: " + node.Title
+			default:
+				msg = "rejected your task: " + node.Title
+			}
+			h.notify(ctx, node.AssigneeID, actor, op.ID, space.ID, msg)
+		}
+		if wantsJSON(r) {
+			node, _ := h.store.GetNode(ctx, nodeID)
+			writeJSON(w, http.StatusOK, map[string]any{"node": node, "op": "review", "verdict": verdict})
+			return
+		}
+		http.Redirect(w, r, fmt.Sprintf("/app/%s/node/%s", space.Slug, nodeID), http.StatusSeeOther)
+
 	case "close_proposal":
 		nodeID := r.FormValue("node_id")
 		outcome := r.FormValue("outcome") // "passed" or "rejected"

@@ -3382,6 +3382,54 @@ templ NodeDetailView(space Space, node Node, children []Node, ops []Op, user Vie
 				</div>
 			}
 
+			<!-- Task workflow: Submit for Review (active) -->
+			if node.Kind == KindTask && node.State == StateActive && user.Name != "" && user.Name != "Anonymous" {
+				<div id="task-workflow" class="bg-surface rounded-lg border border-edge p-4 space-y-3">
+					<h2 class="text-xs font-semibold text-warm-faint uppercase tracking-wider">Submit for Review</h2>
+					<p class="text-xs text-warm-muted">Done with this task? Submit your work for review. The task author will be notified.</p>
+					<form method="POST" action={ templ.SafeURL("/app/" + space.Slug + "/op") } class="space-y-2">
+						<input type="hidden" name="op" value="progress"/>
+						<input type="hidden" name="node_id" value={ node.ID }/>
+						<textarea name="body" rows="2" placeholder="What did you do? (optional summary of work completed)"
+							class="w-full text-sm px-3 py-2 bg-elevated border border-edge rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent resize-none text-warm placeholder-warm-faint"></textarea>
+						<button type="submit" class="px-4 py-2 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-lg hover:bg-amber-500/30 transition-colors text-sm font-medium">
+							Submit for Review →
+						</button>
+					</form>
+				</div>
+			}
+
+			<!-- Task workflow: Review verdict (review state) -->
+			if node.Kind == KindTask && node.State == StateReview && user.Name != "" && user.Name != "Anonymous" {
+				<div id="task-review" class="bg-surface rounded-lg border border-amber-500/30 p-4 space-y-3">
+					<div class="flex items-center gap-2">
+						<span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+						<h2 class="text-xs font-semibold text-amber-400 uppercase tracking-wider">Awaiting Review</h2>
+					</div>
+					<p class="text-xs text-warm-muted">This task is ready for review. Approve to mark it done, request revisions to send it back, or reject to close it.</p>
+					<form method="POST" action={ templ.SafeURL("/app/" + space.Slug + "/op") } class="space-y-3">
+						<input type="hidden" name="op" value="review"/>
+						<input type="hidden" name="node_id" value={ node.ID }/>
+						<textarea name="body" rows="2" placeholder="Feedback for the assignee (required for revisions/rejection)"
+							class="w-full text-sm px-3 py-2 bg-elevated border border-edge rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent resize-none text-warm placeholder-warm-faint"></textarea>
+						<div class="flex gap-2 flex-wrap">
+							<button type="submit" name="verdict" value="approve"
+								class="px-4 py-2 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg hover:bg-emerald-500/30 transition-colors text-sm font-medium">
+								✓ Approve
+							</button>
+							<button type="submit" name="verdict" value="revise"
+								class="px-4 py-2 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-lg hover:bg-amber-500/30 transition-colors text-sm font-medium">
+								↩ Request Revisions
+							</button>
+							<button type="submit" name="verdict" value="reject"
+								class="px-4 py-2 bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg hover:bg-red-500/20 transition-colors text-sm font-medium">
+								✕ Reject
+							</button>
+						</div>
+					</form>
+				</div>
+			}
+
 			<!-- Claim evidence actions -->
 			if node.Kind == KindClaim && (node.State == ClaimClaimed || node.State == ClaimChallenged) && user.Name != "" && user.Name != "Anonymous" {
 				<div class="space-y-3">
@@ -3437,11 +3485,21 @@ templ NodeDetailView(space Space, node Node, children []Node, ops []Op, user Vie
 							<div class="py-1">
 								<div class="flex items-center gap-2 text-xs text-warm-faint">
 									<span class="font-medium text-warm-secondary">{ o.Actor }</span>
-									<span class={ "font-medium px-1.5 py-0.5 rounded-full", opBadgeClass(o.Op) }>{ o.Op }</span>
+									if o.Op == "review" {
+										<span class={ "font-medium px-1.5 py-0.5 rounded-full", reviewVerdictBadgeClass(opVerdict(o.Payload)) }>{ "review: " + opVerdict(o.Payload) }</span>
+									} else {
+										<span class={ "font-medium px-1.5 py-0.5 rounded-full", opBadgeClass(o.Op) }>{ o.Op }</span>
+									}
 									<span>{ o.CreatedAt.Format("Jan 2, 3:04 PM") }</span>
 								</div>
 								if isEvidenceOp(o.Op) && opReason(o.Payload) != "" && opReason(o.Payload) != "challenged" && opReason(o.Payload) != "disputed" {
 									<p class="text-xs text-warm-muted mt-1 ml-4 pl-2 border-l-2 border-edge">{ opReason(o.Payload) }</p>
+								}
+								if o.Op == "review" && opReviewBody(o.Payload) != "" {
+									<p class="text-xs text-warm-muted mt-1 ml-4 pl-2 border-l-2 border-edge">{ opReviewBody(o.Payload) }</p>
+								}
+								if o.Op == "progress" && opProgressBody(o.Payload) != "" {
+									<p class="text-xs text-warm-muted mt-1 ml-4 pl-2 border-l-2 border-edge">{ opProgressBody(o.Payload) }</p>
 								}
 							</div>
 						}
@@ -4086,4 +4144,54 @@ func opReason(payload json.RawMessage) string {
 // isEvidenceOp returns true if the op is a knowledge evidence operation.
 func isEvidenceOp(op string) bool {
 	return op == "challenge" || op == "verify" || op == "retract"
+}
+
+// opVerdict extracts the verdict field from a review op payload.
+func opVerdict(payload json.RawMessage) string {
+	if len(payload) == 0 {
+		return ""
+	}
+	var m map[string]string
+	if err := json.Unmarshal(payload, &m); err != nil {
+		return ""
+	}
+	return m["verdict"]
+}
+
+// opReviewBody extracts the feedback body from a review op payload.
+func opReviewBody(payload json.RawMessage) string {
+	if len(payload) == 0 {
+		return ""
+	}
+	var m map[string]string
+	if err := json.Unmarshal(payload, &m); err != nil {
+		return ""
+	}
+	return m["body"]
+}
+
+// opProgressBody extracts the progress note from a progress op payload.
+func opProgressBody(payload json.RawMessage) string {
+	if len(payload) == 0 {
+		return ""
+	}
+	var m map[string]string
+	if err := json.Unmarshal(payload, &m); err != nil {
+		return ""
+	}
+	return m["body"]
+}
+
+// reviewVerdictBadgeClass returns a badge CSS class for a review verdict.
+func reviewVerdictBadgeClass(verdict string) string {
+	switch verdict {
+	case "approve":
+		return "bg-emerald-500/15 text-emerald-400"
+	case "revise":
+		return "bg-amber-500/15 text-amber-400"
+	case "reject":
+		return "bg-red-500/15 text-red-400"
+	default:
+		return "bg-amber-500/15 text-amber-400"
+	}
 }
