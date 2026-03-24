@@ -2039,6 +2039,31 @@ func (s *Store) ListRepostedNodeIDs(ctx context.Context, userIDs []string, limit
 	return ids
 }
 
+// GetRepostAttribution returns a map of nodeID → reposter user ID, for nodes
+// reposted by any of the given user IDs. Returns one reposter per node (most recent).
+func (s *Store) GetRepostAttribution(ctx context.Context, userIDs, nodeIDs []string) map[string]string {
+	result := make(map[string]string)
+	if len(userIDs) == 0 || len(nodeIDs) == 0 {
+		return result
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT DISTINCT ON (node_id) node_id, user_id FROM reposts
+		 WHERE user_id = ANY($1) AND node_id = ANY($2)
+		 ORDER BY node_id, created_at DESC`,
+		pq.Array(userIDs), pq.Array(nodeIDs))
+	if err != nil {
+		return result
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var nodeID, userID string
+		if rows.Scan(&nodeID, &userID) == nil {
+			result[nodeID] = userID
+		}
+	}
+	return result
+}
+
 // ────────────────────────────────────────────────────────────────────
 // Reposts (Layer 3 — Social / Propagate)
 // ────────────────────────────────────────────────────────────────────

@@ -608,6 +608,7 @@ func (h *Handlers) handleFeed(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Filter by Following tab: show only posts by followed users + reposted by followed users.
+	repostedBy := make(map[string]string) // nodeID → reposter display name
 	if feedTab == "following" {
 		uid := h.userID(r)
 		followedIDs := h.store.ListFollowedIDs(r.Context(), uid)
@@ -628,6 +629,28 @@ func (h *Handlers) handleFeed(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		posts = filtered
+
+		// Build repost attribution: which followed user reposted each post?
+		var repostedIDs []string
+		for _, p := range posts {
+			if !followSet[p.AuthorID] && repostSet[p.ID] {
+				repostedIDs = append(repostedIDs, p.ID)
+			}
+		}
+		if len(repostedIDs) > 0 {
+			attrMap := h.store.GetRepostAttribution(r.Context(), followedIDs, repostedIDs)
+			// Resolve user IDs to display names.
+			var userIDs []string
+			for _, uid := range attrMap {
+				userIDs = append(userIDs, uid)
+			}
+			nameMap := h.store.ResolveUserNames(r.Context(), userIDs)
+			for nodeID, reposterID := range attrMap {
+				if name, ok := nameMap[reposterID]; ok {
+					repostedBy[nodeID] = name
+				}
+			}
+		}
 	}
 
 	if wantsJSON(r) {
@@ -653,7 +676,7 @@ func (h *Handlers) handleFeed(w http.ResponseWriter, r *http.Request) {
 		quotePost, _ = h.store.GetNode(r.Context(), qid)
 	}
 
-	FeedView(*space, spaces, posts, h.viewUser(r), isOwner, len(agents) > 0, searchQuery, feedTab, endorseCounts, userEndorsed, repostCounts, userReposted, quotePost).Render(r.Context(), w)
+	FeedView(*space, spaces, posts, h.viewUser(r), isOwner, len(agents) > 0, searchQuery, feedTab, endorseCounts, userEndorsed, repostCounts, userReposted, repostedBy, quotePost).Render(r.Context(), w)
 }
 
 func (h *Handlers) handleThreads(w http.ResponseWriter, r *http.Request) {
@@ -1285,7 +1308,7 @@ func (h *Handlers) handleOp(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if isHTMX(r) {
-			FeedCard(*node, space.Slug, 0, false, 0, false).Render(ctx, w)
+			FeedCard(*node, space.Slug, 0, false, 0, false, "").Render(ctx, w)
 			return
 		}
 		http.Redirect(w, r, "/app/"+space.Slug+"/feed", http.StatusSeeOther)
