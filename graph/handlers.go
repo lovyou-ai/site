@@ -589,14 +589,19 @@ func (h *Handlers) handleFeed(w http.ResponseWriter, r *http.Request) {
 	spaces, _ := h.store.ListSpaces(r.Context(), h.userID(r))
 
 	searchQuery := r.URL.Query().Get("q")
-	feedTab := r.URL.Query().Get("tab") // "following" or "" (all)
+	feedTab := r.URL.Query().Get("tab") // "following", "foryou", or "" (all)
 
-	posts, err := h.store.ListNodes(r.Context(), ListNodesParams{
-		SpaceID:  space.ID,
-		Kind:     KindPost,
-		ParentID: "root",
-		Query:    searchQuery,
-	})
+	var posts []Node
+	if feedTab == "foryou" && searchQuery == "" {
+		posts, err = h.store.ListPostsByEngagement(r.Context(), space.ID, 50)
+	} else {
+		posts, err = h.store.ListNodes(r.Context(), ListNodesParams{
+			SpaceID:  space.ID,
+			Kind:     KindPost,
+			ParentID: "root",
+			Query:    searchQuery,
+		})
+	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
