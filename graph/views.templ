@@ -96,21 +96,35 @@ templ appLayout(space Space, spaces []Space, activeLens string, user ViewUser) {
 				</nav>
 			</header>
 			<!-- Mobile lens bar -->
-			<nav class="md:hidden border-b border-edge bg-surface overflow-x-auto flex-shrink-0">
-				<div class="flex px-2 py-1.5 gap-1">
+			<nav class="md:hidden border-b border-edge bg-surface flex-shrink-0">
+				<div class="flex px-2 py-1.5 gap-1 overflow-x-auto">
 					<a href="/app" class="px-2.5 py-1 text-[11px] rounded-md bg-elevated text-warm-faint whitespace-nowrap">Home</a>
 					@mobileLensTab(space.Slug, "board", "Board", activeLens)
+					@mobileLensTab(space.Slug, "conversations", "Chat", activeLens)
+					@mobileLensTab(space.Slug, "feed", "Feed", activeLens)
+					@mobileLensTab(space.Slug, "people", "People", activeLens)
+					<button
+						onclick="var m=document.getElementById('mobile-more');m.classList.toggle('hidden');this.classList.toggle('bg-brand/10');this.classList.toggle('text-brand')"
+						class={ "px-3 py-1.5 text-xs font-medium rounded-md whitespace-nowrap transition-colors",
+							templ.KV("bg-brand/10 text-brand", activeLens != "" && activeLens != "board" && activeLens != "conversations" && activeLens != "feed" && activeLens != "people"),
+							templ.KV("text-warm-muted hover:text-warm hover:bg-elevated", activeLens == "" || activeLens == "board" || activeLens == "conversations" || activeLens == "feed" || activeLens == "people") }
+					>
+						More
+					</button>
+				</div>
+				<div
+					id="mobile-more"
+					class={ "px-2 pb-1.5 flex flex-wrap gap-1",
+						templ.KV("hidden", activeLens == "" || activeLens == "board" || activeLens == "conversations" || activeLens == "feed" || activeLens == "people") }
+				>
 					@mobileLensTab(space.Slug, "projects", "Projects", activeLens)
 					@mobileLensTab(space.Slug, "goals", "Goals", activeLens)
+					@mobileLensTab(space.Slug, "threads", "Threads", activeLens)
+					@mobileLensTab(space.Slug, "knowledge", "Knowledge", activeLens)
+					@mobileLensTab(space.Slug, "governance", "Governance", activeLens)
 					@mobileLensTab(space.Slug, "roles", "Roles", activeLens)
 					@mobileLensTab(space.Slug, "teams", "Teams", activeLens)
 					@mobileLensTab(space.Slug, "policies", "Policies", activeLens)
-					@mobileLensTab(space.Slug, "feed", "Feed", activeLens)
-					@mobileLensTab(space.Slug, "conversations", "Chat", activeLens)
-					@mobileLensTab(space.Slug, "threads", "Threads", activeLens)
-					@mobileLensTab(space.Slug, "people", "People", activeLens)
-					@mobileLensTab(space.Slug, "knowledge", "Knowledge", activeLens)
-					@mobileLensTab(space.Slug, "governance", "Governance", activeLens)
 					@mobileLensTab(space.Slug, "changelog", "Build", activeLens)
 					@mobileLensTab(space.Slug, "activity", "Activity", activeLens)
 					@mobileLensTab(space.Slug, "settings", "Settings", activeLens)
