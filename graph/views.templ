@@ -125,29 +125,22 @@ templ appLayout(space Space, spaces []Space, activeLens string, user ViewUser) {
 								<span class="ml-auto bg-brand text-void text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0">{ fmt.Sprintf("%d", user.UnreadCount) }</span>
 							}
 						</a>
-						<!-- Activity modes -->
+						<!-- Modes -->
 						<div>
-							<h2 class="text-[10px] font-semibold text-warm-faint uppercase tracking-wider mb-2">Execute</h2>
 							<nav class="space-y-0.5">
 								@lensLink(space.Slug, "board", "Board", activeLens, boardIcon())
-								@lensLink(space.Slug, "changelog", "Build", activeLens, changelogIcon())
-							</nav>
-						</div>
-						<div>
-							<h2 class="text-[10px] font-semibold text-warm-faint uppercase tracking-wider mb-2">Communicate</h2>
-							<nav class="space-y-0.5">
 								@lensLink(space.Slug, "feed", "Feed", activeLens, feedIcon())
-								@lensLink(space.Slug, "threads", "Threads", activeLens, threadsIcon())
 								@lensLink(space.Slug, "conversations", "Chat", activeLens, conversationsIcon())
+								@lensLink(space.Slug, "threads", "Threads", activeLens, threadsIcon())
 								@lensLink(space.Slug, "people", "People", activeLens, peopleIcon())
 							</nav>
 						</div>
 						<div>
-							<h2 class="text-[10px] font-semibold text-warm-faint uppercase tracking-wider mb-2">Govern</h2>
 							<nav class="space-y-0.5">
 								@lensLink(space.Slug, "knowledge", "Knowledge", activeLens, knowledgeIcon())
 								@lensLink(space.Slug, "governance", "Governance", activeLens, governanceIcon())
-								@lensLink(space.Slug, "activity", "Transparency", activeLens, activityIcon())
+								@lensLink(space.Slug, "changelog", "Build", activeLens, changelogIcon())
+								@lensLink(space.Slug, "activity", "Activity", activeLens, activityIcon())
 							</nav>
 						</div>
 						<div>
