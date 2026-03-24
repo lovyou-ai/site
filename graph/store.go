@@ -87,6 +87,7 @@ type Space struct {
 	OwnerID     string    `json:"owner_id"`
 	Kind        string    `json:"kind"`
 	Visibility  string    `json:"visibility"`
+	ParentID    string    `json:"parent_id,omitempty"`
 	CreatedAt   time.Time `json:"created_at"`
 }
 
@@ -254,6 +255,7 @@ CREATE INDEX IF NOT EXISTS idx_ops_node ON ops(node_id);
 CREATE INDEX IF NOT EXISTS idx_ops_op ON ops(space_id, op);
 
 ALTER TABLE spaces ADD COLUMN IF NOT EXISTS visibility TEXT NOT NULL DEFAULT 'private';
+ALTER TABLE spaces ADD COLUMN IF NOT EXISTS parent_id TEXT;
 ALTER TABLE nodes ADD COLUMN IF NOT EXISTS author_kind TEXT NOT NULL DEFAULT 'human';
 ALTER TABLE nodes ADD COLUMN IF NOT EXISTS author_id TEXT NOT NULL DEFAULT '';
 
@@ -398,7 +400,7 @@ func (s *Store) CreateSpace(ctx context.Context, slug, name, description, ownerI
 // ListSpaces returns spaces owned by the given user.
 func (s *Store) ListSpaces(ctx context.Context, ownerID string) ([]Space, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, slug, name, description, owner_id, kind, visibility, created_at
+		`SELECT id, slug, name, description, owner_id, kind, visibility, COALESCE(parent_id, ''), created_at
 		 FROM spaces WHERE owner_id = $1 ORDER BY created_at`, ownerID)
 	if err != nil {
 		return nil, fmt.Errorf("list spaces: %w", err)
@@ -408,7 +410,27 @@ func (s *Store) ListSpaces(ctx context.Context, ownerID string) ([]Space, error)
 	var spaces []Space
 	for rows.Next() {
 		var sp Space
-		if err := rows.Scan(&sp.ID, &sp.Slug, &sp.Name, &sp.Description, &sp.OwnerID, &sp.Kind, &sp.Visibility, &sp.CreatedAt); err != nil {
+		if err := rows.Scan(&sp.ID, &sp.Slug, &sp.Name, &sp.Description, &sp.OwnerID, &sp.Kind, &sp.Visibility, &sp.ParentID, &sp.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan space: %w", err)
+		}
+		spaces = append(spaces, sp)
+	}
+	return spaces, rows.Err()
+}
+
+// ListChildSpaces returns spaces whose parent_id matches the given space ID.
+func (s *Store) ListChildSpaces(ctx context.Context, parentID string) ([]Space, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, slug, name, description, owner_id, kind, visibility, COALESCE(parent_id, ''), created_at
+		 FROM spaces WHERE parent_id = $1 ORDER BY name`, parentID)
+	if err != nil {
+		return nil, fmt.Errorf("list child spaces: %w", err)
+	}
+	defer rows.Close()
+	var spaces []Space
+	for rows.Next() {
+		var sp Space
+		if err := rows.Scan(&sp.ID, &sp.Slug, &sp.Name, &sp.Description, &sp.OwnerID, &sp.Kind, &sp.Visibility, &sp.ParentID, &sp.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan space: %w", err)
 		}
 		spaces = append(spaces, sp)
@@ -428,7 +450,7 @@ type SpaceWithStats struct {
 // ListPublicSpaces returns all public spaces with node counts, last activity,
 // member count, and agent presence.
 func (s *Store) ListPublicSpaces(ctx context.Context, query ...string) ([]SpaceWithStats, error) {
-	q := `SELECT s.id, s.slug, s.name, s.description, s.owner_id, s.kind, s.visibility, s.created_at,
+	q := `SELECT s.id, s.slug, s.name, s.description, s.owner_id, s.kind, s.visibility, COALESCE(s.parent_id, ''), s.created_at,
 		        COALESCE(n.cnt, 0), n.last_at,
 		        COALESCE(m.member_count, 0), COALESCE(m.has_agent, false)
 		 FROM spaces s
@@ -443,7 +465,7 @@ func (s *Store) ListPublicSpaces(ctx context.Context, query ...string) ([]SpaceW
 		     LEFT JOIN users u ON u.id = o.actor_id
 		     WHERE o.space_id = s.id
 		 ) m ON true
-		 WHERE s.visibility = 'public'`
+		 WHERE s.visibility = 'public' AND s.parent_id IS NULL`
 	var args []any
 	if len(query) > 0 && query[0] != "" {
 		q += ` AND (s.name ILIKE $1 OR s.description ILIKE $1)`
@@ -460,7 +482,7 @@ func (s *Store) ListPublicSpaces(ctx context.Context, query ...string) ([]SpaceW
 	for rows.Next() {
 		var sp SpaceWithStats
 		var lastAt sql.NullTime
-		if err := rows.Scan(&sp.ID, &sp.Slug, &sp.Name, &sp.Description, &sp.OwnerID, &sp.Kind, &sp.Visibility, &sp.CreatedAt,
+		if err := rows.Scan(&sp.ID, &sp.Slug, &sp.Name, &sp.Description, &sp.OwnerID, &sp.Kind, &sp.Visibility, &sp.ParentID, &sp.CreatedAt,
 			&sp.NodeCount, &lastAt, &sp.MemberCount, &sp.HasAgent); err != nil {
 			return nil, fmt.Errorf("scan space: %w", err)
 		}
@@ -507,8 +529,8 @@ func (s *Store) DeleteSpace(ctx context.Context, id string) error {
 func (s *Store) GetSpaceByID(ctx context.Context, id string) (*Space, error) {
 	var sp Space
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, slug, name, description, owner_id, kind, visibility, created_at FROM spaces WHERE id = $1`, id,
-	).Scan(&sp.ID, &sp.Slug, &sp.Name, &sp.Description, &sp.OwnerID, &sp.Kind, &sp.Visibility, &sp.CreatedAt)
+		`SELECT id, slug, name, description, owner_id, kind, visibility, COALESCE(parent_id, ''), created_at FROM spaces WHERE id = $1`, id,
+	).Scan(&sp.ID, &sp.Slug, &sp.Name, &sp.Description, &sp.OwnerID, &sp.Kind, &sp.Visibility, &sp.ParentID, &sp.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -522,8 +544,8 @@ func (s *Store) GetSpaceByID(ctx context.Context, id string) (*Space, error) {
 func (s *Store) GetSpaceBySlug(ctx context.Context, slug string) (*Space, error) {
 	var sp Space
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, slug, name, description, owner_id, kind, visibility, created_at FROM spaces WHERE slug = $1`, slug,
-	).Scan(&sp.ID, &sp.Slug, &sp.Name, &sp.Description, &sp.OwnerID, &sp.Kind, &sp.Visibility, &sp.CreatedAt)
+		`SELECT id, slug, name, description, owner_id, kind, visibility, COALESCE(parent_id, ''), created_at FROM spaces WHERE slug = $1`, slug,
+	).Scan(&sp.ID, &sp.Slug, &sp.Name, &sp.Description, &sp.OwnerID, &sp.Kind, &sp.Visibility, &sp.ParentID, &sp.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -1805,14 +1827,14 @@ func (s *Store) Search(ctx context.Context, query string, limit int) SearchResul
 
 	// Spaces
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, slug, name, description, owner_id, kind, visibility, created_at
+		`SELECT id, slug, name, description, owner_id, kind, visibility, COALESCE(parent_id, ''), created_at
 		 FROM spaces WHERE visibility = 'public' AND (name ILIKE $1 OR description ILIKE $1)
 		 ORDER BY created_at DESC LIMIT $2`, pattern, limit)
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
 			var sp Space
-			if rows.Scan(&sp.ID, &sp.Slug, &sp.Name, &sp.Description, &sp.OwnerID, &sp.Kind, &sp.Visibility, &sp.CreatedAt) == nil {
+			if rows.Scan(&sp.ID, &sp.Slug, &sp.Name, &sp.Description, &sp.OwnerID, &sp.Kind, &sp.Visibility, &sp.ParentID, &sp.CreatedAt) == nil {
 				results.Spaces = append(results.Spaces, sp)
 			}
 		}
