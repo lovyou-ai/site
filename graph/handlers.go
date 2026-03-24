@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -639,22 +640,28 @@ func (h *Handlers) handleConversations(w http.ResponseWriter, r *http.Request) {
 	spaces, _ := h.store.ListSpaces(r.Context(), h.userID(r))
 
 	searchQuery := r.URL.Query().Get("q")
+	filterMode := r.URL.Query().Get("filter") // "dm" or "group" or ""
 	convos, err := h.store.ListConversations(r.Context(), space.ID, h.userID(r))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	// Client-side filter by query (conversations use a different query than ListNodes).
-	if searchQuery != "" {
-		var filtered []ConversationSummary
-		sq := strings.ToLower(searchQuery)
-		for _, c := range convos {
-			if strings.Contains(strings.ToLower(c.Title), sq) {
-				filtered = append(filtered, c)
-			}
+	// Filter by query and DM/group.
+	var filtered []ConversationSummary
+	sq := strings.ToLower(searchQuery)
+	for _, c := range convos {
+		if searchQuery != "" && !strings.Contains(strings.ToLower(c.Title), sq) {
+			continue
 		}
-		convos = filtered
+		if filterMode == "dm" && len(c.Tags) > 2 {
+			continue
+		}
+		if filterMode == "group" && len(c.Tags) <= 2 {
+			continue
+		}
+		filtered = append(filtered, c)
 	}
+	convos = filtered
 
 	if wantsJSON(r) {
 		writeJSON(w, http.StatusOK, map[string]any{"space": space, "conversations": convos, "me": h.userName(r)})
@@ -668,7 +675,7 @@ func (h *Handlers) handleConversations(w http.ResponseWriter, r *http.Request) {
 		allIDs = append(allIDs, c.Tags...)
 	}
 	nameMap := h.store.ResolveUserNames(r.Context(), allIDs)
-	ConversationsView(*space, spaces, convos, h.viewUser(r), agents, nameMap, searchQuery).Render(r.Context(), w)
+	ConversationsView(*space, spaces, convos, h.viewUser(r), agents, nameMap, searchQuery, filterMode == "dm", filterMode == "group").Render(r.Context(), w)
 }
 
 func (h *Handlers) handlePeople(w http.ResponseWriter, r *http.Request) {
@@ -910,6 +917,12 @@ func (h *Handlers) handleConversationDetail(w http.ResponseWriter, r *http.Reque
 	}
 
 	hasAgent, _ := h.store.HasAgentParticipant(r.Context(), node.Tags)
+
+	// Mark conversation as read for current user.
+	uid := h.userID(r)
+	if uid != "" {
+		h.store.MarkConversationRead(r.Context(), uid, nodeID)
+	}
 
 	// Load reactions for all messages.
 	var msgIDs []string
@@ -1760,6 +1773,62 @@ func (h *Handlers) handleOp(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		http.Redirect(w, r, "/app/"+space.Slug+"/feed", http.StatusSeeOther)
+
+	case "edit":
+		nodeID := r.FormValue("node_id")
+		body := strings.TrimSpace(r.FormValue("body"))
+		if nodeID == "" || body == "" {
+			http.Error(w, "node_id and body required", http.StatusBadRequest)
+			return
+		}
+		// Only the author can edit.
+		node, err := h.store.GetNode(ctx, nodeID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if node.AuthorID != actorID {
+			http.Error(w, "only the author can edit", http.StatusForbidden)
+			return
+		}
+		oldBody := node.Body
+		if err := h.store.EditNodeBody(ctx, nodeID, body); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		h.store.RecordOp(ctx, space.ID, nodeID, actor, actorID, "edit", json.RawMessage(`{"old_body":`+strconv.Quote(oldBody)+`}`))
+		if wantsJSON(r) {
+			writeJSON(w, http.StatusOK, map[string]string{"op": "edit"})
+			return
+		}
+		http.Redirect(w, r, r.Header.Get("Referer"), http.StatusSeeOther)
+
+	case "delete":
+		nodeID := r.FormValue("node_id")
+		if nodeID == "" {
+			http.Error(w, "node_id required", http.StatusBadRequest)
+			return
+		}
+		// Only the author can delete.
+		node, err := h.store.GetNode(ctx, nodeID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if node.AuthorID != actorID {
+			http.Error(w, "only the author can delete", http.StatusForbidden)
+			return
+		}
+		if err := h.store.SoftDeleteNode(ctx, nodeID); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		h.store.RecordOp(ctx, space.ID, nodeID, actor, actorID, "delete", json.RawMessage(`{"old_body":`+strconv.Quote(node.Body)+`}`))
+		if wantsJSON(r) {
+			writeJSON(w, http.StatusOK, map[string]string{"op": "delete"})
+			return
+		}
+		http.Redirect(w, r, r.Header.Get("Referer"), http.StatusSeeOther)
 
 	case "react":
 		nodeID := r.FormValue("node_id")

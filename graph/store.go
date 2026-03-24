@@ -279,6 +279,13 @@ ALTER TABLE nodes ADD COLUMN IF NOT EXISTS assignee_id TEXT NOT NULL DEFAULT '';
 ALTER TABLE nodes ADD COLUMN IF NOT EXISTS pinned BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE nodes ADD COLUMN IF NOT EXISTS reply_to_id TEXT NOT NULL DEFAULT '';
 
+CREATE TABLE IF NOT EXISTS read_state (
+    user_id         TEXT NOT NULL,
+    conversation_id TEXT NOT NULL,
+    last_read_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, conversation_id)
+);
+
 CREATE TABLE IF NOT EXISTS endorsements (
     from_id    TEXT NOT NULL,
     to_id      TEXT NOT NULL,
@@ -699,6 +706,7 @@ type ConversationSummary struct {
 	LastAuthor     string `json:"last_author,omitempty"`
 	LastAuthorKind string `json:"last_author_kind,omitempty"`
 	LastBody       string `json:"last_body,omitempty"`
+	UnreadCount    int    `json:"unread_count"`
 }
 
 // ListConversations returns conversations in a space that involve the given user.
@@ -710,7 +718,14 @@ func (s *Store) ListConversations(ctx context.Context, spaceID, userID string) (
 		       n.created_at, n.updated_at,
 		       COALESCE((SELECT COUNT(*) FROM nodes c WHERE c.parent_id = n.id), 0),
 		       0, 0,
-		       lm.author, lm.author_kind, lm.body
+		       lm.author, lm.author_kind, lm.body,
+		       COALESCE((
+		         SELECT COUNT(*) FROM nodes c
+		         WHERE c.parent_id = n.id
+		           AND c.created_at > COALESCE(
+		             (SELECT rs.last_read_at FROM read_state rs WHERE rs.user_id = $2 AND rs.conversation_id = n.id),
+		             '1970-01-01'::timestamptz)
+		       ), 0)
 		FROM nodes n
 		LEFT JOIN LATERAL (
 		    SELECT c.author, c.author_kind, c.body
@@ -738,6 +753,7 @@ func (s *Store) ListConversations(ctx context.Context, spaceID, userID string) (
 			&cs.CreatedAt, &cs.UpdatedAt,
 			&cs.ChildCount, &cs.ChildDone, &cs.BlockerCount,
 			&lastAuthor, &lastAuthorKind, &lastBody,
+			&cs.UnreadCount,
 		); err != nil {
 			return nil, fmt.Errorf("scan conversation: %w", err)
 		}
@@ -1395,6 +1411,44 @@ func (s *Store) MarkNotificationsRead(ctx context.Context, userID string) error 
 // ────────────────────────────────────────────────────────────────────
 // Pinning (Layer 12 — Culture)
 // ────────────────────────────────────────────────────────────────────
+
+// MarkConversationRead updates the read state for a user in a conversation.
+func (s *Store) MarkConversationRead(ctx context.Context, userID, conversationID string) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO read_state (user_id, conversation_id, last_read_at)
+		 VALUES ($1, $2, NOW())
+		 ON CONFLICT (user_id, conversation_id) DO UPDATE SET last_read_at = NOW()`,
+		userID, conversationID)
+	return err
+}
+
+// EditNodeBody updates a node's body and marks it as edited.
+func (s *Store) EditNodeBody(ctx context.Context, nodeID, newBody string) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE nodes SET body = $1, updated_at = NOW() WHERE id = $2`, newBody, nodeID)
+	if err != nil {
+		return fmt.Errorf("edit node: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// SoftDeleteNode replaces the body with a tombstone marker.
+func (s *Store) SoftDeleteNode(ctx context.Context, nodeID string) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE nodes SET body = '[deleted]', state = 'deleted', updated_at = NOW() WHERE id = $1`, nodeID)
+	if err != nil {
+		return fmt.Errorf("soft delete node: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
 
 // SetPinned sets the pinned status of a node.
 func (s *Store) SetPinned(ctx context.Context, nodeID string, pinned bool) error {

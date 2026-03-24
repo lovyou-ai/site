@@ -1165,6 +1165,26 @@ script replyTo(msgID string, author string, text string) {
 	}
 }
 
+script editMessage(msgID string, currentBody string) {
+	event.stopPropagation();
+	event.preventDefault();
+	var newBody = prompt('Edit message:', currentBody);
+	if (newBody !== null && newBody !== currentBody) {
+		var form = new FormData();
+		form.append('op', 'edit');
+		form.append('node_id', msgID);
+		form.append('body', newBody);
+		// Find the closest form's action URL
+		var action = document.querySelector('form[hx-post]');
+		if (action) {
+			fetch(action.getAttribute('hx-post') || action.getAttribute('action'), {
+				method: 'POST',
+				body: form
+			}).then(function() { location.reload(); });
+		}
+	}
+}
+
 script toggleForm(id string) {
 	var el = document.getElementById(id);
 	if (!el) return;
@@ -1453,11 +1473,17 @@ script addParticipant(name string) {
 	input.focus();
 }
 
-templ ConversationsView(space Space, spaces []Space, convos []ConversationSummary, user ViewUser, agents []string, nameMap map[string]string, searchQuery string) {
+templ ConversationsView(space Space, spaces []Space, convos []ConversationSummary, user ViewUser, agents []string, nameMap map[string]string, searchQuery string, isDMFilter bool, isGroupFilter bool) {
 	@appLayout(space, spaces, "conversations", user) {
 		<div class="max-w-2xl mx-auto p-6 space-y-6">
 			<div class="flex items-center justify-between">
-				<h1 class="font-display text-xl font-normal text-warm">Conversations</h1>
+				<h1 class="font-display text-xl font-normal text-warm">Chat</h1>
+			</div>
+			<!-- DM / Group filter -->
+			<div class="flex gap-2">
+				<a href={ templ.SafeURL("/app/" + space.Slug + "/conversations") } class={ "text-xs px-3 py-1 rounded-full border transition-colors", templ.KV("bg-brand/10 border-brand/30 text-warm", searchQuery == "" && !isDMFilter && !isGroupFilter), templ.KV("border-edge text-warm-muted hover:border-brand/30", searchQuery != "" || isDMFilter || isGroupFilter) }>All</a>
+				<a href={ templ.SafeURL("/app/" + space.Slug + "/conversations?filter=dm") } class={ "text-xs px-3 py-1 rounded-full border transition-colors", templ.KV("bg-brand/10 border-brand/30 text-warm", isDMFilter), templ.KV("border-edge text-warm-muted hover:border-brand/30", !isDMFilter) }>DMs</a>
+				<a href={ templ.SafeURL("/app/" + space.Slug + "/conversations?filter=group") } class={ "text-xs px-3 py-1 rounded-full border transition-colors", templ.KV("bg-brand/10 border-brand/30 text-warm", isGroupFilter), templ.KV("border-edge text-warm-muted hover:border-brand/30", !isGroupFilter) }>Groups</a>
 			</div>
 			<form action={ templ.SafeURL("/app/" + space.Slug + "/conversations") } method="GET" class="flex gap-2">
 				<input type="text" name="q" value={ searchQuery } placeholder="Search conversations..."
@@ -1502,8 +1528,13 @@ templ ConversationsView(space Space, spaces []Space, convos []ConversationSummar
 					<a href={ templ.SafeURL(fmt.Sprintf("/app/%s/conversation/%s", space.Slug, convo.ID)) }
 						class="block bg-surface rounded-lg border border-edge p-4 hover:border-brand/40 hover:shadow-lg hover:shadow-brand/5 hover:-translate-y-0.5 transition-all duration-200">
 						<div class="flex items-center justify-between mb-1">
-							<h3 class="font-medium text-warm">{ convo.Title }</h3>
-							<span class="text-xs text-warm-faint">{ fmt.Sprintf("%d messages", convo.ChildCount) }</span>
+							<h3 class={ "font-medium", templ.KV("text-warm", convo.UnreadCount > 0), templ.KV("text-warm-muted", convo.UnreadCount == 0) }>{ convo.Title }</h3>
+							<div class="flex items-center gap-2">
+								if convo.UnreadCount > 0 {
+									<span class="text-[10px] font-bold bg-brand text-void px-1.5 py-0.5 rounded-full">{ fmt.Sprintf("%d", convo.UnreadCount) }</span>
+								}
+								<span class="text-xs text-warm-faint">{ fmt.Sprintf("%d msgs", convo.ChildCount) }</span>
+							</div>
 						</div>
 						if convo.LastBody != "" {
 							<p class="text-sm text-warm-muted mt-1 line-clamp-1">
@@ -1696,11 +1727,20 @@ templ chatMessage(msg Node, currentUserID string, spaceSlug string, reactions []
 						<span class="text-[9px] font-medium px-1 py-0.5 rounded-full bg-violet-500/10 text-violet-400">agent</span>
 					}
 					<span class="text-[10px] text-warm-faint ml-auto">{ msg.CreatedAt.Format("3:04 PM") }</span>
-					<!-- Hover actions: reply + react -->
+					<!-- Hover actions: reply + react + edit/delete -->
 					<div class="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 ml-1">
 						<button type="button" class="text-[10px] text-warm-faint hover:text-brand cursor-pointer"
 							onclick={ replyTo(msg.ID, msg.Author, truncate(msg.Body, 80)) }>reply</button>
 						@quickReactButtons(msg.ID, spaceSlug)
+						if msg.AuthorID == currentUserID && msg.Body != "[deleted]" {
+							<button type="button" class="text-[10px] text-warm-faint hover:text-brand cursor-pointer"
+								onclick={ editMessage(msg.ID, msg.Body) }>edit</button>
+							<button type="button" class="text-[10px] text-warm-faint hover:text-red-400 cursor-pointer"
+								hx-post={ "/app/" + spaceSlug + "/op" }
+								hx-vals={ `{"op":"delete","node_id":"` + msg.ID + `"}` }
+								hx-confirm="Delete this message?"
+								>del</button>
+						}
 					</div>
 				</div>
 				if msg.ReplyToID != "" {
@@ -1709,9 +1749,13 @@ templ chatMessage(msg Node, currentUserID string, spaceSlug string, reactions []
 						<span>: { truncate(msg.ReplyToBody, 60) }</span>
 					</div>
 				}
-				<div class="text-sm text-warm-secondary prose prose-invert prose-sm max-w-none">
-								@renderMarkdown(msg.Body)
-							</div>
+				if msg.Body == "[deleted]" {
+					<div class="text-sm text-warm-faint italic">message deleted</div>
+				} else {
+					<div class="text-sm text-warm-secondary prose prose-invert prose-sm max-w-none">
+									@renderMarkdown(msg.Body)
+								</div>
+				}
 			</div>
 			if len(reactions) > 0 {
 				<div id={ "rxn-" + msg.ID }>
