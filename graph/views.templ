@@ -104,6 +104,7 @@ templ appLayout(space Space, spaces []Space, activeLens string, user ViewUser) {
 					@mobileLensTab(space.Slug, "goals", "Goals", activeLens)
 					@mobileLensTab(space.Slug, "roles", "Roles", activeLens)
 					@mobileLensTab(space.Slug, "teams", "Teams", activeLens)
+					@mobileLensTab(space.Slug, "policies", "Policies", activeLens)
 					@mobileLensTab(space.Slug, "feed", "Feed", activeLens)
 					@mobileLensTab(space.Slug, "conversations", "Chat", activeLens)
 					@mobileLensTab(space.Slug, "threads", "Threads", activeLens)
@@ -137,6 +138,7 @@ templ appLayout(space Space, spaces []Space, activeLens string, user ViewUser) {
 								@lensLink(space.Slug, "goals", "Goals", activeLens, goalsIcon())
 								@lensLink(space.Slug, "roles", "Roles", activeLens, rolesIcon())
 								@lensLink(space.Slug, "teams", "Teams", activeLens, teamsIcon())
+								@lensLink(space.Slug, "policies", "Policies", activeLens, policiesIcon())
 								@lensLink(space.Slug, "feed", "Feed", activeLens, feedIcon())
 								@lensLink(space.Slug, "conversations", "Chat", activeLens, conversationsIcon())
 								@lensLink(space.Slug, "threads", "Threads", activeLens, threadsIcon())
@@ -438,6 +440,12 @@ templ rolesIcon() {
 templ teamsIcon() {
 	<svg class="w-4 h-4 text-warm-faint" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 		<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z"></path>
+	</svg>
+}
+
+templ policiesIcon() {
+	<svg class="w-4 h-4 text-warm-faint" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+		<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
 	</svg>
 }
 
@@ -1652,6 +1660,79 @@ templ TeamsView(space Space, spaces []Space, teams []Node, user ViewUser, isOwne
 						<svg class="w-12 h-12 mx-auto text-warm-faint/30" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z"></path></svg>
 						<p class="text-warm-faint text-sm">No teams yet</p>
 						<p class="text-warm-faint/60 text-xs">Create teams to organize people into functional groups.</p>
+					</div>
+				}
+			</div>
+		</div>
+	}
+}
+
+// ── Policies view ───────────────────────────────────────────────
+
+templ PoliciesView(space Space, spaces []Space, policies []Node, user ViewUser, isOwner bool, searchQuery string) {
+	@appLayout(space, spaces, "policies", user) {
+		<div class="max-w-3xl mx-auto p-6 space-y-6">
+			<div class="flex items-center justify-between">
+				<h1 class="font-display text-xl font-normal text-warm">Policies</h1>
+				if user.Name != "" && user.Name != "Anonymous" {
+					<button onclick="document.getElementById('new-policy-form').classList.toggle('hidden')"
+						class="flex items-center gap-1.5 px-3 py-1.5 bg-brand text-void rounded-lg hover:bg-brand-dark transition-colors text-sm font-medium">
+						<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+						</svg>
+						New policy
+					</button>
+				}
+			</div>
+			<form action={ templ.SafeURL("/app/" + space.Slug + "/policies") } method="GET" class="flex gap-2">
+				<input type="text" name="q" value={ searchQuery } placeholder="Search policies..."
+					class="flex-1 px-3 py-1.5 bg-elevated border border-edge rounded-lg text-xs text-warm placeholder-warm-faint focus:outline-none focus:ring-1 focus:ring-brand"/>
+				if searchQuery != "" {
+					<a href={ templ.SafeURL("/app/" + space.Slug + "/policies") } class="text-xs text-warm-faint hover:text-brand transition-colors flex items-center px-2">Clear</a>
+				}
+			</form>
+			if user.Name != "" && user.Name != "Anonymous" {
+				<div id="new-policy-form" class="hidden">
+					<form method="POST" action={ templ.SafeURL("/app/" + space.Slug + "/op") }
+						class="bg-surface rounded-lg border border-edge p-4 space-y-3">
+						<input type="hidden" name="op" value="intend"/>
+						<input type="hidden" name="kind" value="policy"/>
+						<input type="text" name="title" placeholder="Policy name (e.g. Code of Conduct, Privacy Policy)" required
+							class="w-full text-sm px-3 py-2 bg-elevated border border-edge rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent text-warm placeholder-warm-faint"/>
+						<textarea name="description" placeholder="Policy description and scope (optional)" rows="2"
+							class="w-full text-sm px-3 py-2 bg-elevated border border-edge rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent resize-none text-warm placeholder-warm-faint"></textarea>
+						<div class="flex justify-end">
+							<button type="submit" class="px-4 py-1.5 bg-brand text-void rounded-lg hover:bg-brand-dark transition-colors text-sm font-medium">Create policy</button>
+						</div>
+					</form>
+				</div>
+			}
+			<div class="space-y-3">
+				for _, policy := range policies {
+					<a href={ templ.SafeURL(fmt.Sprintf("/app/%s/node/%s", space.Slug, policy.ID)) }
+						class="block bg-surface rounded-lg border border-edge p-4 hover:border-brand/40 hover:shadow-lg hover:shadow-brand/5 hover:-translate-y-0.5 transition-all duration-200">
+						<div class="flex items-center justify-between mb-1">
+							<div class="flex items-center gap-2">
+								<svg class="w-4 h-4 text-brand flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+								</svg>
+								<h3 class="font-medium text-warm">{ policy.Title }</h3>
+							</div>
+						</div>
+						if policy.Body != "" {
+							<p class="text-sm text-warm-muted line-clamp-2 mb-2 ml-6">{ truncate(policy.Body, 150) }</p>
+						}
+						<div class="flex items-center gap-3 text-xs text-warm-faint ml-6">
+							<span>{ policy.Author }</span>
+							<span class="ml-auto">{ policy.CreatedAt.Format("Jan 2") }</span>
+						</div>
+					</a>
+				}
+				if len(policies) == 0 {
+					<div class="text-center py-12 space-y-3">
+						<svg class="w-12 h-12 mx-auto text-warm-faint/30" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+						<p class="text-warm-faint text-sm">No policies yet</p>
+						<p class="text-warm-faint/60 text-xs">Define policies to codify rules and standards for the space.</p>
 					</div>
 				}
 			</div>

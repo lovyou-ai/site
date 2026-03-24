@@ -87,6 +87,7 @@ func (h *Handlers) Register(mux *http.ServeMux) {
 	mux.Handle("GET /app/{slug}/goals", h.readWrap(h.handleGoals))
 	mux.Handle("GET /app/{slug}/roles", h.readWrap(h.handleRoles))
 	mux.Handle("GET /app/{slug}/teams", h.readWrap(h.handleTeams))
+	mux.Handle("GET /app/{slug}/policies", h.readWrap(h.handlePolicies))
 
 	// Conversation detail (optional auth).
 	mux.Handle("GET /app/{slug}/conversation/{id}", h.readWrap(h.handleConversationDetail))
@@ -1167,6 +1168,39 @@ func (h *Handlers) handleTeams(w http.ResponseWriter, r *http.Request) {
 	}
 
 	TeamsView(*space, spaces, teams, h.viewUser(r), isOwner, searchQuery).Render(r.Context(), w)
+}
+
+func (h *Handlers) handlePolicies(w http.ResponseWriter, r *http.Request) {
+	space, isOwner, err := h.spaceForRead(r)
+	if errors.Is(err, ErrNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	spaces, _ := h.store.ListSpaces(r.Context(), h.userID(r))
+	searchQuery := r.URL.Query().Get("q")
+
+	policies, err := h.store.ListNodes(r.Context(), ListNodesParams{
+		SpaceID:  space.ID,
+		Kind:     KindPolicy,
+		ParentID: "root",
+		Query:    searchQuery,
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if wantsJSON(r) {
+		writeJSON(w, http.StatusOK, map[string]any{"space": space, "policies": policies})
+		return
+	}
+
+	PoliciesView(*space, spaces, policies, h.viewUser(r), isOwner, searchQuery).Render(r.Context(), w)
 }
 
 func (h *Handlers) handleGovernance(w http.ResponseWriter, r *http.Request) {
