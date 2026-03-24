@@ -799,6 +799,73 @@ func (s *Store) ListPostsByEngagement(ctx context.Context, spaceID string, limit
 	return nodes, rows.Err()
 }
 
+// ListPostsByTrending returns posts sorted by engagement velocity:
+// recent engagement (last 48h) divided by post age in hours.
+func (s *Store) ListPostsByTrending(ctx context.Context, spaceID string, limit int) ([]Node, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	query := `
+		SELECT n.id, n.space_id, n.parent_id, n.kind, n.title, n.body,
+		       n.state, n.priority, n.assignee, n.assignee_id, n.author, n.author_id, n.author_kind, n.tags, n.pinned, n.due_date,
+		       n.created_at, n.updated_at,
+		       COALESCE((SELECT COUNT(*) FROM nodes c WHERE c.parent_id = n.id), 0),
+		       COALESCE((SELECT COUNT(*) FROM nodes c WHERE c.parent_id = n.id AND c.state = 'done'), 0),
+		       COALESCE((SELECT COUNT(*) FROM node_deps d JOIN nodes b ON b.id = d.depends_on WHERE d.node_id = n.id AND b.state != 'done'), 0),
+		       n.reply_to_id,
+		       COALESCE((SELECT r.author FROM nodes r WHERE r.id = n.reply_to_id), ''),
+		       COALESCE((SELECT LEFT(r.body, 80) FROM nodes r WHERE r.id = n.reply_to_id), ''),
+		       n.quote_of_id,
+		       COALESCE((SELECT q.author FROM nodes q WHERE q.id = n.quote_of_id), ''),
+		       COALESCE((SELECT q.title FROM nodes q WHERE q.id = n.quote_of_id), ''),
+		       COALESCE((SELECT LEFT(q.body, 120) FROM nodes q WHERE q.id = n.quote_of_id), '')
+		FROM nodes n
+		WHERE n.space_id = $1 AND n.kind = 'post' AND n.parent_id IS NULL
+		ORDER BY
+		  (
+		    COALESCE((SELECT COUNT(*) FROM endorsements e WHERE e.to_id = n.id AND e.created_at > NOW() - INTERVAL '48 hours'), 0) * 3
+		    + COALESCE((SELECT COUNT(*) FROM reposts rp WHERE rp.node_id = n.id AND rp.created_at > NOW() - INTERVAL '48 hours'), 0) * 2
+		    + COALESCE((SELECT COUNT(*) FROM nodes c WHERE c.parent_id = n.id AND c.created_at > NOW() - INTERVAL '48 hours'), 0)
+		  )::float / GREATEST(1, EXTRACT(EPOCH FROM NOW() - n.created_at) / 3600)
+		  DESC,
+		  n.created_at DESC
+		LIMIT $2`
+
+	rows, err := s.db.QueryContext(ctx, query, spaceID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list posts by trending: %w", err)
+	}
+	defer rows.Close()
+
+	var nodes []Node
+	for rows.Next() {
+		var n Node
+		var parentID sql.NullString
+		var dueDate sql.NullTime
+
+		if err := rows.Scan(
+			&n.ID, &n.SpaceID, &parentID, &n.Kind, &n.Title, &n.Body,
+			&n.State, &n.Priority, &n.Assignee, &n.AssigneeID, &n.Author, &n.AuthorID, &n.AuthorKind, pq.Array(&n.Tags), &n.Pinned, &dueDate,
+			&n.CreatedAt, &n.UpdatedAt,
+			&n.ChildCount, &n.ChildDone, &n.BlockerCount,
+			&n.ReplyToID, &n.ReplyToAuthor, &n.ReplyToBody,
+			&n.QuoteOfID, &n.QuoteOfAuthor, &n.QuoteOfTitle, &n.QuoteOfBody,
+		); err != nil {
+			return nil, fmt.Errorf("scan trending post: %w", err)
+		}
+
+		if parentID.Valid {
+			n.ParentID = parentID.String
+		}
+		if dueDate.Valid {
+			d := dueDate.Time
+			n.DueDate = &d
+		}
+		nodes = append(nodes, n)
+	}
+	return nodes, rows.Err()
+}
+
 // ConversationSummary is a conversation node with last message preview.
 type ConversationSummary struct {
 	Node

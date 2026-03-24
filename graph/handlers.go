@@ -594,6 +594,8 @@ func (h *Handlers) handleFeed(w http.ResponseWriter, r *http.Request) {
 	var posts []Node
 	if feedTab == "foryou" && searchQuery == "" {
 		posts, err = h.store.ListPostsByEngagement(r.Context(), space.ID, 50)
+	} else if feedTab == "trending" && searchQuery == "" {
+		posts, err = h.store.ListPostsByTrending(r.Context(), space.ID, 50)
 	} else {
 		posts, err = h.store.ListNodes(r.Context(), ListNodesParams{
 			SpaceID:  space.ID,

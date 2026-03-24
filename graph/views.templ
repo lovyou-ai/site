@@ -1324,6 +1324,10 @@ templ FeedView(space Space, spaces []Space, posts []Node, user ViewUser, isOwner
 						class={ "text-xs px-3 py-1 rounded-full border transition-colors",
 							templ.KV("bg-brand/10 border-brand/30 text-warm", feedTab == "foryou"),
 							templ.KV("border-edge text-warm-muted hover:border-brand/30", feedTab != "foryou") }>For You</a>
+					<a href={ templ.SafeURL("/app/" + space.Slug + "/feed?tab=trending") }
+						class={ "text-xs px-3 py-1 rounded-full border transition-colors",
+							templ.KV("bg-brand/10 border-brand/30 text-warm", feedTab == "trending"),
+							templ.KV("border-edge text-warm-muted hover:border-brand/30", feedTab != "trending") }>Trending</a>
 				</div>
 			}
 			<form action={ templ.SafeURL("/app/" + space.Slug + "/feed") } method="GET" class="flex gap-2">
