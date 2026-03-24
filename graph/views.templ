@@ -504,6 +504,80 @@ templ governanceIcon() {
 	</svg>
 }
 
+// ── Welcome (new users with no spaces) ──────────────────────────
+
+templ Welcome(user ViewUser) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<title>Welcome — lovyou.ai</title>
+			@themeBlock()
+		</head>
+		<body class="bg-void text-warm min-h-screen">
+			<div class="max-w-xl mx-auto px-6 py-20 space-y-10">
+				<!-- Welcome message -->
+				<div class="text-center space-y-4">
+					<div class="text-5xl">✦</div>
+					<h1 class="font-display text-3xl font-light text-warm">
+						Welcome, { user.Name }.
+					</h1>
+					<p class="text-warm-muted leading-relaxed">
+						You're in. Let's set up your first space — a place where you and an AI agent
+						work together. Takes 30 seconds.
+					</p>
+				</div>
+
+				<!-- Create space form — simple, prominent -->
+				<form method="POST" action="/app/new" class="bg-surface rounded-lg border border-edge p-6 space-y-4">
+					<div>
+						<label for="name" class="block text-sm font-medium text-warm mb-1.5">Name your space</label>
+						<input type="text" id="name" name="name" placeholder="My Project" required autofocus
+							class="w-full text-lg px-4 py-3 bg-elevated border border-edge rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent text-warm placeholder-warm-faint"/>
+						<p class="text-xs text-warm-faint mt-1.5">A project, a team, a community — whatever you're working on.</p>
+					</div>
+					<div>
+						<label for="description" class="block text-sm font-medium text-warm mb-1.5">What's it for? <span class="text-warm-faint font-normal">(optional)</span></label>
+						<input type="text" id="description" name="description" placeholder="Building a REST API for our app"
+							class="w-full px-4 py-2.5 bg-elevated border border-edge rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent text-warm placeholder-warm-faint text-sm"/>
+					</div>
+					<input type="hidden" name="visibility" value="public"/>
+					<button type="submit" class="w-full py-3 bg-brand text-void rounded-lg hover:bg-brand-dark transition-all font-medium text-lg hover:shadow-lg hover:shadow-brand/20">
+						Create space
+					</button>
+				</form>
+
+				<!-- What happens next -->
+				<div class="text-center space-y-3 text-sm text-warm-muted">
+					<p>After you create a space, you can:</p>
+					<div class="grid grid-cols-3 gap-4 text-center">
+						<div>
+							<div class="text-brand text-lg mb-1">✎</div>
+							<p>Create tasks and assign them to an AI agent</p>
+						</div>
+						<div>
+							<div class="text-brand text-lg mb-1">💬</div>
+							<p>Chat with the agent directly</p>
+						</div>
+						<div>
+							<div class="text-brand text-lg mb-1">◉</div>
+							<p>See everything on one board</p>
+						</div>
+					</div>
+				</div>
+
+				<!-- Or explore -->
+				<div class="text-center">
+					<a href="/discover" class="text-sm text-warm-faint hover:text-brand transition-colors">
+						or browse what others have built &rarr;
+					</a>
+				</div>
+			</div>
+		</body>
+	</html>
+}
+
 // ── Space index ─────────────────────────────────────────────────
 
 templ Dashboard(spaces []Space, tasks []DashboardTask, convos []DashboardConversation, agentOps []DashboardOp, user ViewUser, defaultSpaceSlug string, agents []string, unreadCount int, taskFilter string) {
