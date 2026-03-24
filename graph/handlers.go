@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"sort"
 	"regexp"
 	"strconv"
 	"strings"
@@ -206,6 +207,80 @@ func wantsJSON(r *http.Request) bool {
 
 // parseMessageSearch extracts from:user operators from a search query.
 // Returns the remaining body query and the from-author filter.
+// sortTasks sorts tasks in place by the given sort key.
+func sortTasks(tasks []Node, sortBy string) {
+	switch sortBy {
+	case "priority":
+		sort.Slice(tasks, func(i, j int) bool {
+			return priorityRank(tasks[i].Priority) < priorityRank(tasks[j].Priority)
+		})
+	case "due":
+		sort.Slice(tasks, func(i, j int) bool {
+			if tasks[i].DueDate == nil && tasks[j].DueDate == nil {
+				return false
+			}
+			if tasks[i].DueDate == nil {
+				return false
+			}
+			if tasks[j].DueDate == nil {
+				return true
+			}
+			return tasks[i].DueDate.Before(*tasks[j].DueDate)
+		})
+	case "created":
+		sort.Slice(tasks, func(i, j int) bool {
+			return tasks[i].CreatedAt.After(tasks[j].CreatedAt)
+		})
+	case "state":
+		sort.Slice(tasks, func(i, j int) bool {
+			return stateRank(tasks[i].State) < stateRank(tasks[j].State)
+		})
+	case "assignee":
+		sort.Slice(tasks, func(i, j int) bool {
+			return tasks[i].Assignee < tasks[j].Assignee
+		})
+	default:
+		// Default: by priority then created
+		sort.Slice(tasks, func(i, j int) bool {
+			pi, pj := priorityRank(tasks[i].Priority), priorityRank(tasks[j].Priority)
+			if pi != pj {
+				return pi < pj
+			}
+			return tasks[i].CreatedAt.After(tasks[j].CreatedAt)
+		})
+	}
+}
+
+func priorityRank(p string) int {
+	switch p {
+	case "urgent":
+		return 0
+	case "high":
+		return 1
+	case "medium":
+		return 2
+	case "low":
+		return 3
+	default:
+		return 4
+	}
+}
+
+func stateRank(s string) int {
+	switch s {
+	case StateActive:
+		return 0
+	case StateReview:
+		return 1
+	case StateOpen:
+		return 2
+	case StateDone:
+		return 3
+	default:
+		return 4
+	}
+}
+
 func parseMessageSearch(q string) (body string, fromAuthor string) {
 	parts := strings.Fields(q)
 	var bodyParts []string
@@ -570,8 +645,18 @@ func (h *Handlers) handleBoard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	columns := groupByState(tasks)
 	agents, _ := h.store.ListAgentNames(r.Context())
+	viewMode := r.URL.Query().Get("view") // "list" or "" (board)
+	sortBy := r.URL.Query().Get("sort")   // "priority", "due", "created", "state", "assignee"
+
+	if viewMode == "list" {
+		// Sort tasks for list view.
+		sortTasks(tasks, sortBy)
+		ListView(*space, spaces, tasks, h.viewUser(r), isOwner, agents, q, assigneeFilter, sortBy).Render(r.Context(), w)
+		return
+	}
+
+	columns := groupByState(tasks)
 	BoardView(*space, spaces, columns, h.viewUser(r), isOwner, agents, q, assigneeFilter).Render(r.Context(), w)
 }
 

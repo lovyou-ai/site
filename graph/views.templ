@@ -969,6 +969,13 @@ templ BoardView(space Space, spaces []Space, columns []BoardColumn, user ViewUse
 					</button>
 				}
 			</div>
+			<!-- View toggle -->
+			<div class="flex gap-2 mb-3">
+				<a href={ templ.SafeURL("/app/" + space.Slug + "/board") }
+					class="text-xs px-3 py-1 rounded-full border bg-brand/10 border-brand/30 text-warm">Board</a>
+				<a href={ templ.SafeURL("/app/" + space.Slug + "/board?view=list") }
+					class="text-xs px-3 py-1 rounded-full border border-edge text-warm-muted hover:border-brand/30">List</a>
+			</div>
 			<!-- Filters -->
 			<form action={ templ.SafeURL("/app/" + space.Slug + "/board") } method="GET" class="flex gap-2 mb-3 flex-shrink-0">
 				<input
@@ -1299,6 +1306,102 @@ templ TaskCard(node Node, spaceSlug string) {
 		</div>
 	</a>
 	</div>
+}
+
+// ── List view (table) ───────────────────────────────────────────
+
+templ ListView(space Space, spaces []Space, tasks []Node, user ViewUser, isOwner bool, agents []string, searchQuery string, assigneeFilter string, sortBy string) {
+	@appLayout(space, spaces, "board", user) {
+		<div class="p-4 md:p-6 h-full flex flex-col">
+			<div class="flex items-center justify-between mb-4 gap-2">
+				<h1 class="font-display text-xl font-light text-warm truncate">{ space.Name }</h1>
+			</div>
+			<!-- View toggle -->
+			<div class="flex gap-2 mb-3">
+				<a href={ templ.SafeURL("/app/" + space.Slug + "/board") }
+					class="text-xs px-3 py-1 rounded-full border border-edge text-warm-muted hover:border-brand/30">Board</a>
+				<a href={ templ.SafeURL("/app/" + space.Slug + "/board?view=list") }
+					class="text-xs px-3 py-1 rounded-full border bg-brand/10 border-brand/30 text-warm">List</a>
+			</div>
+			<!-- Filters -->
+			<form action={ templ.SafeURL("/app/" + space.Slug + "/board") } method="GET" class="flex gap-2 mb-3 flex-shrink-0">
+				<input type="hidden" name="view" value="list"/>
+				<input type="text" name="q" value={ searchQuery } placeholder="Search tasks..."
+					class="flex-1 px-3 py-1.5 bg-elevated border border-edge rounded-lg text-xs text-warm placeholder-warm-faint focus:outline-none focus:ring-1 focus:ring-brand"/>
+				if searchQuery != "" || assigneeFilter != "" {
+					<a href={ templ.SafeURL("/app/" + space.Slug + "/board?view=list") } class="px-2 py-1.5 text-xs text-warm-faint hover:text-brand transition-colors flex items-center">Clear</a>
+				}
+			</form>
+			<!-- Table -->
+			<div class="flex-1 overflow-auto">
+				<table class="w-full text-sm">
+					<thead>
+						<tr class="text-[10px] uppercase tracking-wider text-warm-faint border-b border-edge">
+							<th class="text-left py-2 px-3 font-semibold">
+								<a href={ templ.SafeURL("/app/" + space.Slug + "/board?view=list&sort=state") } class="hover:text-brand">State</a>
+							</th>
+							<th class="text-left py-2 px-3 font-semibold">
+								<a href={ templ.SafeURL("/app/" + space.Slug + "/board?view=list&sort=priority") } class="hover:text-brand">Pri</a>
+							</th>
+							<th class="text-left py-2 px-3 font-semibold">Title</th>
+							<th class="text-left py-2 px-3 font-semibold">
+								<a href={ templ.SafeURL("/app/" + space.Slug + "/board?view=list&sort=assignee") } class="hover:text-brand">Assignee</a>
+							</th>
+							<th class="text-left py-2 px-3 font-semibold">
+								<a href={ templ.SafeURL("/app/" + space.Slug + "/board?view=list&sort=due") } class="hover:text-brand">Due</a>
+							</th>
+							<th class="text-right py-2 px-3 font-semibold">Sub</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, task := range tasks {
+							<tr class="border-b border-edge/50 hover:bg-elevated/50 transition-colors">
+								<td class="py-2 px-3">
+									<span class={ "text-[10px] font-medium px-1.5 py-0.5 rounded-full", stateBgClass(task.State) }>{ stateLabel(task.State) }</span>
+								</td>
+								<td class="py-2 px-3">
+									<span class="w-2 h-2 rounded-full inline-block" style={ fmt.Sprintf("background-color: %s", priorityDotHex(task.Priority)) } title={ task.Priority }></span>
+								</td>
+								<td class="py-2 px-3">
+									<a href={ templ.SafeURL(fmt.Sprintf("/app/%s/node/%s", space.Slug, task.ID)) } class="text-warm hover:text-brand transition-colors">
+										{ task.Title }
+									</a>
+									if task.BlockerCount > 0 {
+										<span class="text-[10px] px-1 py-0.5 rounded bg-red-500/10 text-red-400 ml-1">blocked</span>
+									}
+								</td>
+								<td class="py-2 px-3 text-warm-muted">
+									if task.Assignee != "" {
+										<span class="flex items-center gap-1">
+											<span class="w-4 h-4 rounded-full bg-brand/10 text-brand text-[9px] font-bold flex items-center justify-center">{ initial(task.Assignee) }</span>
+											<span class="text-xs">{ task.Assignee }</span>
+										</span>
+									}
+								</td>
+								<td class="py-2 px-3 text-xs">
+									if task.DueDate != nil {
+										if task.DueDate.Before(time.Now()) && task.State != StateDone {
+											<span class="text-red-400 font-medium">{ task.DueDate.Format("Jan 2") }</span>
+										} else {
+											<span class="text-warm-faint">{ task.DueDate.Format("Jan 2") }</span>
+										}
+									}
+								</td>
+								<td class="py-2 px-3 text-right text-xs text-warm-faint">
+									if task.ChildCount > 0 {
+										{ fmt.Sprintf("%d/%d", task.ChildDone, task.ChildCount) }
+									}
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+				if len(tasks) == 0 {
+					<div class="text-center py-12 text-warm-faint text-sm">No tasks match your filters</div>
+				}
+			</div>
+		</div>
+	}
 }
 
 // ── Feed view ───────────────────────────────────────────────────
