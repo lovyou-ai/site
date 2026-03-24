@@ -130,25 +130,30 @@ templ appLayout(space Space, spaces []Space, activeLens string, user ViewUser) {
 								<span class="ml-auto bg-brand text-void text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0">{ fmt.Sprintf("%d", user.UnreadCount) }</span>
 							}
 						</a>
-						<!-- Modes -->
+						<!-- Core — what every user needs -->
 						<div>
 							<nav class="space-y-0.5">
 								@lensLink(space.Slug, "board", "Board", activeLens, boardIcon())
-								@lensLink(space.Slug, "projects", "Projects", activeLens, projectsIcon())
-								@lensLink(space.Slug, "goals", "Goals", activeLens, goalsIcon())
-								@lensLink(space.Slug, "roles", "Roles", activeLens, rolesIcon())
-								@lensLink(space.Slug, "teams", "Teams", activeLens, teamsIcon())
-								@lensLink(space.Slug, "policies", "Policies", activeLens, policiesIcon())
-								@lensLink(space.Slug, "feed", "Feed", activeLens, feedIcon())
 								@lensLink(space.Slug, "conversations", "Chat", activeLens, conversationsIcon())
-								@lensLink(space.Slug, "threads", "Threads", activeLens, threadsIcon())
+								@lensLink(space.Slug, "feed", "Feed", activeLens, feedIcon())
 								@lensLink(space.Slug, "people", "People", activeLens, peopleIcon())
 							</nav>
 						</div>
+						<!-- More — expanded on click -->
 						<div>
-							<nav class="space-y-0.5">
+							<button onclick="document.getElementById('sidebar-more').classList.toggle('hidden'); this.querySelector('svg').classList.toggle('rotate-90')" class="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-warm-faint hover:text-brand transition-colors">
+								<svg class="w-3 h-3 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+								More
+							</button>
+							<nav id="sidebar-more" class="hidden space-y-0.5 mt-0.5">
+								@lensLink(space.Slug, "projects", "Projects", activeLens, projectsIcon())
+								@lensLink(space.Slug, "goals", "Goals", activeLens, goalsIcon())
+								@lensLink(space.Slug, "threads", "Threads", activeLens, threadsIcon())
 								@lensLink(space.Slug, "knowledge", "Knowledge", activeLens, knowledgeIcon())
 								@lensLink(space.Slug, "governance", "Governance", activeLens, governanceIcon())
+								@lensLink(space.Slug, "roles", "Roles", activeLens, rolesIcon())
+								@lensLink(space.Slug, "teams", "Teams", activeLens, teamsIcon())
+								@lensLink(space.Slug, "policies", "Policies", activeLens, policiesIcon())
 								@lensLink(space.Slug, "changelog", "Build", activeLens, changelogIcon())
 								@lensLink(space.Slug, "activity", "Activity", activeLens, activityIcon())
 							</nav>
