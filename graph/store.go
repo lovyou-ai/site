@@ -1683,6 +1683,68 @@ func (s *Store) Search(ctx context.Context, query string, limit int) SearchResul
 	return results
 }
 
+// MessageSearchResult is a message matching a search query, with conversation context.
+type MessageSearchResult struct {
+	ID         string
+	Body       string
+	Author     string
+	AuthorID   string
+	AuthorKind string
+	CreatedAt  time.Time
+	ConvoID    string
+	ConvoTitle string
+}
+
+// SearchMessages searches message bodies within a space's conversations.
+// Optional fromAuthor filters by author name (ILIKE).
+func (s *Store) SearchMessages(ctx context.Context, spaceID, query, fromAuthor string, limit int) ([]MessageSearchResult, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	if query == "" && fromAuthor == "" {
+		return nil, nil
+	}
+
+	q := `SELECT m.id, m.body, m.author, m.author_id, m.author_kind, m.created_at,
+	             c.id, c.title
+	      FROM nodes m
+	      JOIN nodes c ON c.id = m.parent_id AND c.kind = 'conversation'
+	      WHERE m.space_id = $1 AND m.body != '[deleted]'`
+
+	args := []any{spaceID}
+	argN := 2
+
+	if query != "" {
+		q += fmt.Sprintf(" AND m.body ILIKE '%%' || $%d || '%%'", argN)
+		args = append(args, query)
+		argN++
+	}
+	if fromAuthor != "" {
+		q += fmt.Sprintf(" AND m.author ILIKE '%%' || $%d || '%%'", argN)
+		args = append(args, fromAuthor)
+		argN++
+	}
+
+	q += fmt.Sprintf(" ORDER BY m.created_at DESC LIMIT $%d", argN)
+	args = append(args, limit)
+
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("search messages: %w", err)
+	}
+	defer rows.Close()
+
+	var results []MessageSearchResult
+	for rows.Next() {
+		var r MessageSearchResult
+		if err := rows.Scan(&r.ID, &r.Body, &r.Author, &r.AuthorID, &r.AuthorKind, &r.CreatedAt, &r.ConvoID, &r.ConvoTitle); err != nil {
+			return nil, fmt.Errorf("scan message search: %w", err)
+		}
+		results = append(results, r)
+	}
+	return results, rows.Err()
+}
+
 // ────────────────────────────────────────────────────────────────────
 // Endorsements (Layer 9 — Relationship)
 // ────────────────────────────────────────────────────────────────────

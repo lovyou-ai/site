@@ -204,6 +204,22 @@ func wantsJSON(r *http.Request) bool {
 	return strings.Contains(r.Header.Get("Accept"), "application/json")
 }
 
+// parseMessageSearch extracts from:user operators from a search query.
+// Returns the remaining body query and the from-author filter.
+func parseMessageSearch(q string) (body string, fromAuthor string) {
+	parts := strings.Fields(q)
+	var bodyParts []string
+	for _, p := range parts {
+		if strings.HasPrefix(p, "from:") {
+			fromAuthor = strings.TrimPrefix(p, "from:")
+		} else {
+			bodyParts = append(bodyParts, p)
+		}
+	}
+	body = strings.Join(bodyParts, " ")
+	return
+}
+
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -675,7 +691,15 @@ func (h *Handlers) handleConversations(w http.ResponseWriter, r *http.Request) {
 		allIDs = append(allIDs, c.Tags...)
 	}
 	nameMap := h.store.ResolveUserNames(r.Context(), allIDs)
-	ConversationsView(*space, spaces, convos, h.viewUser(r), agents, nameMap, searchQuery, filterMode == "dm", filterMode == "group").Render(r.Context(), w)
+
+	// Message search: when a query is present, also search message bodies.
+	var msgResults []MessageSearchResult
+	if searchQuery != "" {
+		bodyQ, fromAuthor := parseMessageSearch(searchQuery)
+		msgResults, _ = h.store.SearchMessages(r.Context(), space.ID, bodyQ, fromAuthor, 20)
+	}
+
+	ConversationsView(*space, spaces, convos, h.viewUser(r), agents, nameMap, searchQuery, filterMode == "dm", filterMode == "group", msgResults).Render(r.Context(), w)
 }
 
 func (h *Handlers) handlePeople(w http.ResponseWriter, r *http.Request) {

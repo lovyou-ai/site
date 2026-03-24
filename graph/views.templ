@@ -1180,7 +1180,12 @@ script editMessage(msgID string, currentBody string) {
 			fetch(action.getAttribute('hx-post') || action.getAttribute('action'), {
 				method: 'POST',
 				body: form
-			}).then(function() { location.reload(); });
+			}).then(function(resp) {
+				if (resp.ok) {
+					var el = document.getElementById('msg-body-' + msgID);
+					if (el) el.textContent = newBody;
+				}
+			});
 		}
 	}
 }
@@ -1473,7 +1478,7 @@ script addParticipant(name string) {
 	input.focus();
 }
 
-templ ConversationsView(space Space, spaces []Space, convos []ConversationSummary, user ViewUser, agents []string, nameMap map[string]string, searchQuery string, isDMFilter bool, isGroupFilter bool) {
+templ ConversationsView(space Space, spaces []Space, convos []ConversationSummary, user ViewUser, agents []string, nameMap map[string]string, searchQuery string, isDMFilter bool, isGroupFilter bool, msgResults []MessageSearchResult) {
 	@appLayout(space, spaces, "conversations", user) {
 		<div class="max-w-2xl mx-auto p-6 space-y-6">
 			<div class="flex items-center justify-between">
@@ -1486,7 +1491,7 @@ templ ConversationsView(space Space, spaces []Space, convos []ConversationSummar
 				<a href={ templ.SafeURL("/app/" + space.Slug + "/conversations?filter=group") } class={ "text-xs px-3 py-1 rounded-full border transition-colors", templ.KV("bg-brand/10 border-brand/30 text-warm", isGroupFilter), templ.KV("border-edge text-warm-muted hover:border-brand/30", !isGroupFilter) }>Groups</a>
 			</div>
 			<form action={ templ.SafeURL("/app/" + space.Slug + "/conversations") } method="GET" class="flex gap-2">
-				<input type="text" name="q" value={ searchQuery } placeholder="Search conversations..."
+				<input type="text" name="q" value={ searchQuery } placeholder="Search messages... (from:name)"
 					class="flex-1 px-3 py-1.5 bg-elevated border border-edge rounded-lg text-xs text-warm placeholder-warm-faint focus:outline-none focus:ring-1 focus:ring-brand"/>
 				if searchQuery != "" {
 					<a href={ templ.SafeURL("/app/" + space.Slug + "/conversations") } class="text-xs text-warm-faint hover:text-brand transition-colors flex items-center px-2">Clear</a>
@@ -1562,7 +1567,7 @@ templ ConversationsView(space Space, spaces []Space, convos []ConversationSummar
 						</div>
 					</a>
 				}
-				if len(convos) == 0 {
+				if len(convos) == 0 && len(msgResults) == 0 {
 					<div class="text-center py-12 space-y-3">
 						<svg class="w-12 h-12 mx-auto text-warm-faint/30" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
 						<p class="text-warm-faint text-sm">No conversations yet</p>
@@ -1570,6 +1575,22 @@ templ ConversationsView(space Space, spaces []Space, convos []ConversationSummar
 					</div>
 				}
 			</div>
+			if len(msgResults) > 0 {
+				<div class="space-y-2">
+					<h2 class="text-sm font-medium text-warm-muted">Messages ({ fmt.Sprintf("%d", len(msgResults)) })</h2>
+					for _, msg := range msgResults {
+						<a href={ templ.SafeURL(fmt.Sprintf("/app/%s/conversation/%s", space.Slug, msg.ConvoID)) }
+							class="block bg-surface rounded-lg border border-edge p-3 hover:border-brand/40 transition-colors">
+							<div class="flex items-center gap-2 mb-1">
+								<span class={ "text-xs font-medium", templ.KV("text-violet-400", msg.AuthorKind == "agent"), templ.KV("text-warm", msg.AuthorKind != "agent") }>{ msg.Author }</span>
+								<span class="text-[10px] text-warm-faint">in { msg.ConvoTitle }</span>
+								<span class="text-[10px] text-warm-faint ml-auto">{ msg.CreatedAt.Format("Jan 2, 3:04 PM") }</span>
+							</div>
+							<p class="text-sm text-warm-secondary line-clamp-2">{ truncate(msg.Body, 200) }</p>
+						</a>
+					}
+				</div>
+			}
 		</div>
 	}
 }
@@ -1752,7 +1773,7 @@ templ chatMessage(msg Node, currentUserID string, spaceSlug string, reactions []
 				if msg.Body == "[deleted]" {
 					<div class="text-sm text-warm-faint italic">message deleted</div>
 				} else {
-					<div class="text-sm text-warm-secondary prose prose-invert prose-sm max-w-none">
+					<div id={ "msg-body-" + msg.ID } class="text-sm text-warm-secondary prose prose-invert prose-sm max-w-none">
 									@renderMarkdown(msg.Body)
 								</div>
 				}
