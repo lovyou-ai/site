@@ -1649,12 +1649,22 @@ templ boardOnboarding(spaceSlug string, agents []string) {
 				<input type="text" name="title" placeholder="Task title" required
 					class="w-full text-sm px-3 py-2 bg-elevated border border-edge rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent text-warm placeholder-warm-faint"/>
 				if len(agents) > 0 {
-					<select name="assignee" class="w-full text-sm px-3 py-1.5 bg-elevated border border-edge rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent text-warm-secondary">
-						<option value="">Assign to... (optional)</option>
-						for _, a := range agents {
-							<option value={ a }>{ a }</option>
+					<div class="flex items-center gap-2 px-2 py-1.5 bg-brand/5 border border-brand/20 rounded-md">
+						<input type="checkbox" id="assign-to-agent" checked
+							class="w-3.5 h-3.5 accent-brand cursor-pointer flex-shrink-0"
+							onchange={ toggleAgentAssign(agents[0]) }/>
+						<label for="assign-to-agent" class="text-xs text-warm-secondary cursor-pointer flex-1 select-none">💡 Assign to our AI colleague?</label>
+						if len(agents) == 1 {
+							<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-500/10 text-violet-400 border border-violet-500/20">{ agents[0] }</span>
+						} else {
+							<select id="agent-select" class="text-[10px] px-1.5 py-0.5 bg-elevated border border-violet-500/20 rounded-full text-violet-400 focus:outline-none" onchange={ pickAgent() }>
+								for _, agent := range agents {
+									<option value={ agent }>{ agent }</option>
+								}
+							</select>
 						}
-					</select>
+						<input type="text" name="assignee" id="task-assignee" value={ agents[0] } class="hidden"/>
+					</div>
 				}
 				<div class="flex justify-end">
 					<button type="submit" class="px-4 py-1.5 bg-brand text-void rounded-lg hover:bg-brand-dark transition-colors text-sm font-medium">Create task</button>
