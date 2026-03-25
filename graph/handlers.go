@@ -1788,7 +1788,11 @@ func (h *Handlers) handleOp(w http.ResponseWriter, r *http.Request) {
 			TaskCard(*node, space.Slug).Render(ctx, w)
 			return
 		}
-		http.Redirect(w, r, "/app/"+space.Slug+"/board", http.StatusSeeOther)
+		boardURL := "/app/" + space.Slug + "/board"
+		if assigneeID != "" {
+			boardURL += "?aha_agent=1"
+		}
+		http.Redirect(w, r, boardURL, http.StatusSeeOther)
 
 	case "decompose":
 		title := strings.TrimSpace(r.FormValue("title"))

@@ -1119,7 +1119,7 @@ templ gettingStartedChecklist(spaceSlug string, hasTask bool, hasAgentTask bool,
 					</svg>
 					<span class="text-xs text-warm">
 						<button
-							onclick="var f=document.getElementById('new-task-form');if(f){f.classList.remove('hidden');f.querySelector('input[name=title]').focus()}"
+							onclick="var f=document.getElementById('new-task-form');if(f){f.classList.remove('hidden');f.querySelector('input[name=title]').focus();}else{var ot=document.getElementById('onboarding-title');if(ot){ot.scrollIntoView({behavior:'smooth',block:'center'});ot.focus();}}"
 							class="text-brand hover:underline font-medium"
 						>Create your first task</button>
 					</span>
@@ -1548,6 +1548,7 @@ templ BoardView(space Space, spaces []Space, columns []BoardColumn, user ViewUse
 		if showInviteCard {
 			@inviteTeammatesCard(space.Slug, inviteToken)
 		}
+		@ahaAgentToast()
 		<div class="p-4 md:p-6 h-full flex flex-col">
 			<div class="flex items-center justify-between mb-4 md:mb-6 gap-2">
 				<div class="min-w-0">
@@ -1556,7 +1557,7 @@ templ BoardView(space Space, spaces []Space, columns []BoardColumn, user ViewUse
 				</div>
 				if user.Name != "" && user.Name != "Anonymous" {
 					<button
-						onclick="var f=document.getElementById('new-task-form');if(f)f.classList.toggle('hidden')"
+						onclick="var f=document.getElementById('new-task-form');if(f)f.classList.toggle('hidden');else{var ot=document.getElementById('onboarding-title');if(ot){ot.scrollIntoView({behavior:'smooth',block:'center'});ot.focus();}}"
 						class="flex items-center gap-1.5 px-3 py-1.5 bg-brand text-void rounded-lg hover:bg-brand-dark transition-colors text-sm font-medium"
 					>
 						<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1602,7 +1603,7 @@ templ BoardView(space Space, spaces []Space, columns []BoardColumn, user ViewUse
 					<a href={ templ.SafeURL("/app/" + space.Slug + "/board") } class="px-2 py-1.5 text-xs text-warm-faint hover:text-brand transition-colors flex items-center">Clear</a>
 				}
 			</form>
-			if boardEmpty(columns) && user.Name != "" && user.Name != "Anonymous" && searchQuery == "" && assigneeFilter == "" {
+			if boardEmpty(columns) && user.Name != "" && user.Name != "Anonymous" && searchQuery == "" && assigneeFilter == "" && projectFilter == "" {
 				@boardOnboarding(space.Slug, agents)
 			} else {
 				<div class="flex gap-4 flex-1 overflow-x-auto pb-4">
@@ -1629,6 +1630,33 @@ templ BoardView(space Space, spaces []Space, columns []BoardColumn, user ViewUse
 	}
 }
 
+templ ahaAgentToast() {
+	<div id="aha-agent-toast" class="hidden fixed bottom-4 right-4 z-50 bg-elevated border border-brand/30 rounded-xl shadow-lg p-4 max-w-xs">
+		<div class="flex items-start gap-3">
+			<div class="w-8 h-8 rounded-full bg-violet-500/10 flex items-center justify-center flex-shrink-0">
+				<svg class="w-4 h-4 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.346.346a7.8 7.8 0 01-1.4 1.4l-.346.346a5 5 0 01-7.072 0z"></path>
+				</svg>
+			</div>
+			<div>
+				<p class="text-sm font-medium text-warm">Agent notified</p>
+				<p class="text-xs text-warm-muted mt-0.5">Your AI colleague is on it. <a href="#" id="aha-chat-link" class="text-brand hover:underline">Check Chat</a> to see their response.</p>
+			</div>
+		</div>
+	</div>
+	<script>
+	(function(){
+		if(new URLSearchParams(window.location.search).get('aha_agent')==='1'){
+			var toast=document.getElementById('aha-agent-toast');
+			var chatLink=document.getElementById('aha-chat-link');
+			if(chatLink){var m=location.pathname.match(/\/app\/([^/]+)/);if(m)chatLink.href='/app/'+m[1]+'/conversations';}
+			if(toast){toast.classList.remove('hidden');setTimeout(function(){toast.classList.add('hidden');},6000);}
+			var url=new URL(window.location.href);url.searchParams.delete('aha_agent');history.replaceState(null,'',url.toString());
+		}
+	})();
+	</script>
+}
+
 templ boardOnboarding(spaceSlug string, agents []string) {
 	<div class="flex-1 flex items-center justify-center py-12">
 		<div class="max-w-sm w-full space-y-5">
@@ -1647,7 +1675,7 @@ templ boardOnboarding(spaceSlug string, agents []string) {
 			</div>
 			<form action={ templ.SafeURL("/app/" + spaceSlug + "/op") } method="POST" class="bg-surface rounded-lg border border-edge p-4 space-y-3">
 				<input type="hidden" name="op" value="intend"/>
-				<input type="text" name="title" placeholder="Task title" required
+				<input type="text" id="onboarding-title" name="title" placeholder="Task title" required
 					class="w-full text-sm px-3 py-2 bg-elevated border border-edge rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent text-warm placeholder-warm-faint"/>
 				if len(agents) > 0 {
 					<div class="flex items-center gap-2 px-2 py-1.5 bg-brand/5 border border-brand/20 rounded-md">

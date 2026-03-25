@@ -443,7 +443,7 @@ func main() {
 		}).Render(r.Context(), w)
 	})
 
-	// Chat with agent — creates a conversation in the demo space with the persona's role tag.
+	// Chat with agent — creates a conversation in the agents space with the persona's role tag.
 	mux.Handle("POST /agents/{name}/chat", writeWrap(func(w http.ResponseWriter, r *http.Request) {
 		personaName := r.PathValue("name")
 		if graphStore == nil {
@@ -456,9 +456,9 @@ func main() {
 			http.NotFound(w, r)
 			return
 		}
-		demoSpace, err := graphStore.GetSpaceBySlug(ctx, graph.DemoSpaceSlug)
-		if err != nil || demoSpace == nil {
-			http.Error(w, "demo space not available", http.StatusServiceUnavailable)
+		agentsSpace, err := graphStore.GetSpaceBySlug(ctx, graph.AgentsSpaceSlug)
+		if err != nil || agentsSpace == nil {
+			http.Error(w, "agents space not available", http.StatusServiceUnavailable)
 			return
 		}
 		user := auth.UserFromContext(ctx)
@@ -467,7 +467,7 @@ func main() {
 			actorID, actor, actorKind = user.ID, user.Name, "human"
 		}
 		node, err := graphStore.CreateNode(ctx, graph.CreateNodeParams{
-			SpaceID:    demoSpace.ID,
+			SpaceID:    agentsSpace.ID,
 			Kind:       graph.KindConversation,
 			Title:      "Chat with " + persona.Display,
 			Author:     actor,
@@ -479,11 +479,11 @@ func main() {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		graphStore.RecordOp(ctx, demoSpace.ID, node.ID, actor, actorID, "converse", nil)
+		graphStore.RecordOp(ctx, agentsSpace.ID, node.ID, actor, actorID, "converse", nil)
 		if mind != nil {
-			go mind.OnMessage(demoSpace.ID, demoSpace.Slug, node, actorID)
+			go mind.OnMessage(agentsSpace.ID, agentsSpace.Slug, node, actorID)
 		}
-		http.Redirect(w, r, fmt.Sprintf("/app/%s/conversation/%s", demoSpace.Slug, node.ID), http.StatusSeeOther)
+		http.Redirect(w, r, fmt.Sprintf("/app/%s/conversation/%s", agentsSpace.Slug, node.ID), http.StatusSeeOther)
 	}))
 
 	// User profiles — identity from action history (Layer 8).
