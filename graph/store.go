@@ -2991,6 +2991,23 @@ func (s *Store) UpsertAgentPersona(ctx context.Context, p AgentPersona) error {
 	return err
 }
 
+// GetAgentPersonaForConversation finds any agent participant in the given tag list
+// (user IDs) and returns their persona, or nil if the conversation has no agent.
+func (s *Store) GetAgentPersonaForConversation(ctx context.Context, tags []string) *AgentPersona {
+	if len(tags) == 0 {
+		return nil
+	}
+	var agentName string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT name FROM users WHERE id = ANY($1) AND kind = 'agent' LIMIT 1`,
+		pq.Array(tags),
+	).Scan(&agentName)
+	if err != nil {
+		return nil
+	}
+	return s.GetAgentPersona(ctx, agentName)
+}
+
 // GetAgentPersona returns a persona by slug name, or nil if not found.
 func (s *Store) GetAgentPersona(ctx context.Context, name string) *AgentPersona {
 	var p AgentPersona

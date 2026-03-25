@@ -1433,6 +1433,7 @@ func (h *Handlers) handleConversationDetail(w http.ResponseWriter, r *http.Reque
 	}
 
 	hasAgent, _ := h.store.HasAgentParticipant(r.Context(), node.Tags)
+	agentPersona := h.store.GetAgentPersonaForConversation(r.Context(), node.Tags)
 
 	// Mark conversation as read for current user.
 	uid := h.userID(r)
@@ -1449,7 +1450,7 @@ func (h *Handlers) handleConversationDetail(w http.ResponseWriter, r *http.Reque
 
 	user := h.viewUser(r)
 	nameMap := h.store.ResolveUserNames(r.Context(), node.Tags)
-	ConversationDetailView(*space, *node, messages, user, h.userID(r), hasAgent, nameMap, rxnMap).Render(r.Context(), w)
+	ConversationDetailView(*space, *node, messages, user, h.userID(r), hasAgent, agentPersona, nameMap, rxnMap).Render(r.Context(), w)
 }
 
 // handleConversationMessages returns new messages since the given timestamp.
