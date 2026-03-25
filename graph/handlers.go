@@ -1312,18 +1312,32 @@ func (h *Handlers) handleGoalDetail(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	if goal.SpaceID != space.ID {
+		http.NotFound(w, r)
+		return
+	}
 
-	projects, _ := h.store.ListNodes(r.Context(), ListNodesParams{
+	projects, err := h.store.ListNodes(r.Context(), ListNodesParams{
 		SpaceID:  space.ID,
 		Kind:     KindProject,
 		ParentID: goal.ID,
+		Limit:    200,
 	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
-	directTasks, _ := h.store.ListNodes(r.Context(), ListNodesParams{
+	directTasks, err := h.store.ListNodes(r.Context(), ListNodesParams{
 		SpaceID:  space.ID,
 		Kind:     KindTask,
 		ParentID: goal.ID,
+		Limit:    200,
 	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	totalTasks := len(directTasks)
 	doneTasks := 0
