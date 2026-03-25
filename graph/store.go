@@ -1027,10 +1027,11 @@ func (s *Store) ListConversations(ctx context.Context, spaceID, userID string) (
 // UpdateLastMessagePreview stores the first 100 chars of the latest message body
 // on the conversation node to avoid a lateral join in list queries.
 func (s *Store) UpdateLastMessagePreview(ctx context.Context, conversationID, body string) error {
-	preview := body
-	if len(preview) > 100 {
-		preview = preview[:100]
+	runes := []rune(body)
+	if len(runes) > 100 {
+		runes = runes[:100]
 	}
+	preview := string(runes)
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE nodes SET last_message_preview = $1, updated_at = NOW() WHERE id = $2`,
 		preview, conversationID)
