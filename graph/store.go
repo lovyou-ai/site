@@ -3077,16 +3077,10 @@ func (s *Store) ListAgentPersonas(ctx context.Context) ([]AgentPersona, error) {
 // Agent Memories
 // ────────────────────────────────────────────────────────────────────
 
-// AgentMemory is a stored memory for a persona about a specific user.
-type AgentMemory struct {
-	ID         string    `json:"id"`
-	Persona    string    `json:"persona"`
-	UserID     string    `json:"user_id"`
-	Kind       string    `json:"kind"`       // "context", "fact", "preference"
-	Content    string    `json:"content"`
-	SourceID   string    `json:"source_id"`  // conversation or node that produced this memory
-	Importance int       `json:"importance"` // 1-10
-	CreatedAt  time.Time `json:"created_at"`
+var validMemoryKinds = map[string]bool{
+	"context":    true,
+	"fact":       true,
+	"preference": true,
 }
 
 // RememberForPersona stores a memory for a persona about a specific user.
@@ -3094,6 +3088,9 @@ type AgentMemory struct {
 func (s *Store) RememberForPersona(ctx context.Context, persona, userID, kind, content, sourceID string, importance int) error {
 	if kind == "" {
 		kind = "context"
+	}
+	if !validMemoryKinds[kind] {
+		return fmt.Errorf("invalid memory kind %q: must be context, fact, or preference", kind)
 	}
 	if importance <= 0 || importance > 10 {
 		importance = 5
