@@ -52,6 +52,8 @@ const (
 	KindRole         = "role"
 	KindTeam         = "team"
 	KindPolicy       = "policy"
+	KindDocument     = "document"
+	KindQuestion     = "question"
 )
 
 // Claim epistemic states.
@@ -1139,6 +1141,16 @@ func (s *Store) HasAgentParticipant(ctx context.Context, ids []string) (bool, er
 		`SELECT EXISTS(SELECT 1 FROM users WHERE id = ANY($1) AND kind = 'agent')`,
 		pq.Array(ids)).Scan(&exists)
 	return exists, err
+}
+
+// ListDocumentContext returns KindDocument nodes in a space for prompt context injection.
+// Returns at most 10 documents with title and body (BOUNDED invariant).
+func (s *Store) ListDocumentContext(ctx context.Context, spaceID string) ([]Node, error) {
+	return s.ListNodes(ctx, ListNodesParams{
+		SpaceID: spaceID,
+		Kind:    KindDocument,
+		Limit:   10,
+	})
 }
 
 // UpdateNodeState sets a node's state.

@@ -3,6 +3,7 @@ package graph
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -305,7 +306,7 @@ func TestBuildSystemPromptPersonaRouting(t *testing.T) {
 			Title: "Test Convo",
 			Tags:  []string{"role:" + personaSlug, "some-user-id"},
 		}
-		prompt := mind.buildSystemPrompt(convo, "some-agent-id")
+		prompt := mind.buildSystemPrompt(convo, "some-agent-id", nil)
 		if !strings.Contains(prompt, personaPrompt) {
 			t.Errorf("prompt does not contain persona text\ngot: %s", prompt[:min(len(prompt), 200)])
 		}
@@ -327,7 +328,7 @@ func TestBuildSystemPromptPersonaRouting(t *testing.T) {
 			Title: "Test Convo",
 			Tags:  []string{"some-user-id", agentID},
 		}
-		prompt := mind.buildSystemPrompt(convo, agentID)
+		prompt := mind.buildSystemPrompt(convo, agentID, nil)
 		if !strings.Contains(prompt, personaPrompt) {
 			t.Errorf("prompt does not contain persona text\ngot: %s", prompt[:min(len(prompt), 200)])
 		}
@@ -338,7 +339,7 @@ func TestBuildSystemPromptPersonaRouting(t *testing.T) {
 			Title: "Test Convo",
 			Tags:  []string{"user-a", "user-b"},
 		}
-		prompt := mind.buildSystemPrompt(convo, "some-agent-id")
+		prompt := mind.buildSystemPrompt(convo, "some-agent-id", nil)
 		if !strings.Contains(prompt, "SOUL") {
 			t.Errorf("expected mindSoul fallback, got: %s", prompt[:min(len(prompt), 200)])
 		}
@@ -440,5 +441,337 @@ func TestMindE2E(t *testing.T) {
 	}
 	if !agentReplied {
 		t.Errorf("agent should have replied")
+	}
+}
+
+// TestBuildQuestionAnswerPrompt verifies document context is injected into the prompt.
+func TestBuildQuestionAnswerPrompt(t *testing.T) {
+	db, store := testDB(t)
+	mind := NewMind(db, store, "fake-token")
+
+	question := &Node{
+		Title: "What is the event graph?",
+		Body:  "I want to understand the architecture.",
+	}
+
+	t.Run("no_documents_prompt_has_question", func(t *testing.T) {
+		prompt := mind.buildQuestionAnswerPrompt(question, nil)
+		if !strings.Contains(prompt, "What is the event graph?") {
+			t.Errorf("prompt missing question title\ngot: %s", prompt[:min(len(prompt), 300)])
+		}
+		if strings.Contains(prompt, "SPACE DOCUMENTS") {
+			t.Errorf("prompt should not contain SPACE DOCUMENTS section when no docs\ngot: %s", prompt[:min(len(prompt), 300)])
+		}
+	})
+
+	t.Run("with_documents_context_injected", func(t *testing.T) {
+		docs := []Node{
+			{Title: "Architecture Overview", Body: "The event graph is a signed, causal chain of events."},
+			{Title: "Trust Model", Body: "Trust scores range from 0.0 to 1.0."},
+		}
+		prompt := mind.buildQuestionAnswerPrompt(question, docs)
+		if !strings.Contains(prompt, "Architecture Overview") {
+			t.Errorf("prompt missing document title\ngot: %s", prompt[:min(len(prompt), 500)])
+		}
+		if !strings.Contains(prompt, "signed, causal chain") {
+			t.Errorf("prompt missing document body\ngot: %s", prompt[:min(len(prompt), 500)])
+		}
+		if !strings.Contains(prompt, "SPACE DOCUMENTS") {
+			t.Errorf("prompt missing SPACE DOCUMENTS section header\ngot: %s", prompt[:min(len(prompt), 500)])
+		}
+	})
+}
+
+// TestBuildSystemPromptDocumentInjection verifies that space documents are injected
+// into the auto-reply system prompt as "## Space Knowledge" context.
+func TestBuildSystemPromptDocumentInjection(t *testing.T) {
+	db, store := testDB(t)
+	mind := NewMind(db, store, "fake-token")
+
+	convo := &Node{
+		Title: "Test Chat",
+		Tags:  []string{"user-a", "user-b"},
+	}
+
+	t.Run("no_documents_no_space_knowledge_section", func(t *testing.T) {
+		prompt := mind.buildSystemPrompt(convo, "some-agent-id", nil)
+		if strings.Contains(prompt, "Space Knowledge") {
+			t.Errorf("prompt should not contain Space Knowledge section when no docs\ngot: %s", prompt[:min(len(prompt), 400)])
+		}
+		// Core SOUL section must still be present.
+		if !strings.Contains(prompt, "SOUL") {
+			t.Errorf("prompt missing SOUL section\ngot: %s", prompt[:min(len(prompt), 200)])
+		}
+	})
+
+	t.Run("with_documents_space_knowledge_injected", func(t *testing.T) {
+		docs := []Node{
+			{Title: "Onboarding Guide", Body: "Welcome to the space. Start by creating a task."},
+			{Title: "Team Norms", Body: "We value async communication and written decisions."},
+		}
+		prompt := mind.buildSystemPrompt(convo, "some-agent-id", docs)
+		if !strings.Contains(prompt, "## Space Knowledge") {
+			t.Errorf("prompt missing '## Space Knowledge' header\ngot: %s", prompt[:min(len(prompt), 600)])
+		}
+		if !strings.Contains(prompt, "Onboarding Guide") {
+			t.Errorf("prompt missing first document title\ngot: %s", prompt[:min(len(prompt), 600)])
+		}
+		if !strings.Contains(prompt, "We value async communication") {
+			t.Errorf("prompt missing second document body\ngot: %s", prompt[:min(len(prompt), 600)])
+		}
+		// CONVERSATION section must still follow the docs.
+		if !strings.Contains(prompt, "== CONVERSATION ==") {
+			t.Errorf("prompt missing CONVERSATION section\ngot: %s", prompt[:min(len(prompt), 600)])
+		}
+	})
+}
+
+// TestAutoReplyDocumentInjectionPath verifies that the auto-reply pipeline fetches
+// documents from the store and injects them into the system prompt. Tests both
+// the "docs present" and "no docs" cases end-to-end through the store layer.
+func TestAutoReplyDocumentInjectionPath(t *testing.T) {
+	db, store := testDB(t)
+	ctx := t.Context()
+	mind := NewMind(db, store, "fake-token")
+
+	space, err := store.CreateSpace(ctx, "auto-reply-doc-inject-test", "Doc Inject Test", "", "owner", "project", "public")
+	if err != nil {
+		t.Fatalf("create space: %v", err)
+	}
+	t.Cleanup(func() { store.DeleteSpace(ctx, space.ID) })
+
+	// Seed two documents in the space.
+	store.CreateNode(ctx, CreateNodeParams{
+		SpaceID: space.ID, Kind: KindDocument,
+		Title:      "Team Handbook",
+		Body:       "We ship every Friday and have standups at 9am.",
+		Author:     "Tester", AuthorID: "test-owner", AuthorKind: "human",
+	})
+	store.CreateNode(ctx, CreateNodeParams{
+		SpaceID: space.ID, Kind: KindDocument,
+		Title:      "Architecture Decisions",
+		Body:       "We use event-sourcing for all state changes.",
+		Author:     "Tester", AuthorID: "test-owner", AuthorKind: "human",
+	})
+
+	t.Run("docs_present_injected_in_prompt", func(t *testing.T) {
+		docs, err := store.ListDocumentContext(ctx, space.ID)
+		if err != nil {
+			t.Fatalf("ListDocumentContext: %v", err)
+		}
+		if len(docs) == 0 {
+			t.Fatal("expected docs, got none — check seed above")
+		}
+
+		convo := &Node{Title: "Team Chat", Tags: []string{"user-a", "user-b"}}
+		prompt := mind.buildSystemPrompt(convo, "some-agent-id", docs)
+
+		if !strings.Contains(prompt, "Team Handbook") {
+			t.Errorf("prompt missing document title 'Team Handbook'\ngot: %s", prompt[:min(len(prompt), 600)])
+		}
+		if !strings.Contains(prompt, "We ship every Friday") {
+			t.Errorf("prompt missing document body content\ngot: %s", prompt[:min(len(prompt), 600)])
+		}
+		if !strings.Contains(prompt, "## Space Knowledge") {
+			t.Errorf("prompt missing '## Space Knowledge' section header\ngot: %s", prompt[:min(len(prompt), 600)])
+		}
+	})
+
+	t.Run("no_docs_no_space_knowledge_section", func(t *testing.T) {
+		// A space with no docs returns an empty slice from ListDocumentContext.
+		emptyDocs, err := store.ListDocumentContext(ctx, "nonexistent-space-id")
+		if err != nil {
+			t.Fatalf("ListDocumentContext: %v", err)
+		}
+
+		convo := &Node{Title: "Empty Space Chat", Tags: []string{"user-a", "user-b"}}
+		prompt := mind.buildSystemPrompt(convo, "some-agent-id", emptyDocs)
+
+		if strings.Contains(prompt, "Space Knowledge") {
+			t.Errorf("prompt should not contain 'Space Knowledge' when no docs present\ngot: %s", prompt[:min(len(prompt), 400)])
+		}
+		if !strings.Contains(prompt, "SOUL") {
+			t.Errorf("prompt missing SOUL fallback section\ngot: %s", prompt[:min(len(prompt), 200)])
+		}
+	})
+}
+
+// TestListDocumentContextBounded verifies that ListDocumentContext enforces a
+// maximum of 10 documents (Invariant 13: BOUNDED — every operation has defined scope).
+func TestListDocumentContextBounded(t *testing.T) {
+	_, store := testDB(t)
+	ctx := t.Context()
+
+	space, err := store.CreateSpace(ctx, "doc-ctx-limit-test", "Doc Ctx Limit", "", "owner", "project", "public")
+	if err != nil {
+		t.Fatalf("create space: %v", err)
+	}
+	t.Cleanup(func() { store.DeleteSpace(ctx, space.ID) })
+
+	// Create 15 documents — more than the BOUNDED limit of 10.
+	for i := 0; i < 15; i++ {
+		store.CreateNode(ctx, CreateNodeParams{
+			SpaceID: space.ID, Kind: KindDocument,
+			Title:      fmt.Sprintf("Doc %d", i),
+			Body:       fmt.Sprintf("Content for doc %d.", i),
+			Author:     "Tester", AuthorID: "test-owner", AuthorKind: "human",
+		})
+	}
+
+	docs, err := store.ListDocumentContext(ctx, space.ID)
+	if err != nil {
+		t.Fatalf("ListDocumentContext: %v", err)
+	}
+
+	const maxDocContext = 10 // matches the Limit in ListDocumentContext
+	if len(docs) > maxDocContext {
+		t.Errorf("ListDocumentContext returned %d docs, want at most %d (Invariant 13: BOUNDED)", len(docs), maxDocContext)
+	}
+}
+
+// TestReplyToInjectsDocuments verifies that the Chat auto-reply path (replyTo)
+// fetches space documents from the store and injects them into the system prompt.
+// This tests the full wiring: replyTo → ListDocumentContext → buildSystemPrompt.
+// It uses callClaudeOverride to capture the assembled system prompt without a real Claude call.
+func TestReplyToInjectsDocuments(t *testing.T) {
+	db, store := testDB(t)
+	ctx := t.Context()
+
+	mind := NewMind(db, store, "fake-token")
+
+	agentName := "ReplyDocTestAgent"
+	agentID := "reply-doc-test-agent-id"
+
+	db.ExecContext(ctx, `DELETE FROM users WHERE id = $1`, agentID)
+	_, err := db.ExecContext(ctx,
+		`INSERT INTO users (id, google_id, email, name, kind) VALUES ($1, $2, $3, $4, 'agent')`,
+		agentID, "agent:"+agentName, agentName+"@test.lovyou.ai", agentName)
+	if err != nil {
+		t.Fatalf("create agent: %v", err)
+	}
+	t.Cleanup(func() { db.ExecContext(ctx, `DELETE FROM users WHERE id = $1`, agentID) })
+
+	space, err := store.CreateSpace(ctx, "reply-doc-inject-test", "Reply Doc Inject Test", "", "owner", "project", "public")
+	if err != nil {
+		t.Fatalf("create space: %v", err)
+	}
+	t.Cleanup(func() { store.DeleteSpace(ctx, space.ID) })
+
+	// Seed documents in the space.
+	store.CreateNode(ctx, CreateNodeParams{
+		SpaceID: space.ID, Kind: KindDocument,
+		Title: "Runbook", Body: "Deploy with ./ship.sh on Fridays.",
+		Author: "Owner", AuthorID: "owner", AuthorKind: "human",
+	})
+
+	convo, err := store.CreateNode(ctx, CreateNodeParams{
+		SpaceID: space.ID, Kind: KindConversation,
+		Title: "Chat", Author: "Human", AuthorID: "human-id", AuthorKind: "human",
+		Tags: []string{"human-id", agentID},
+	})
+	if err != nil {
+		t.Fatalf("create conversation: %v", err)
+	}
+
+	var capturedPrompt string
+	mind.callClaudeOverride = func(_ context.Context, systemPrompt string, _ []claudeMessage) (string, error) {
+		capturedPrompt = systemPrompt
+		return "ok", nil
+	}
+
+	// Call OnMessage — this is the full Chat auto-reply path.
+	mind.OnMessage(space.ID, space.Slug, convo, "human-id")
+
+	if capturedPrompt == "" {
+		t.Fatal("callClaude was never called — check agent participant lookup")
+	}
+	if !strings.Contains(capturedPrompt, "## Space Knowledge") {
+		t.Errorf("system prompt missing '## Space Knowledge' section\ngot: %s", capturedPrompt[:min(len(capturedPrompt), 600)])
+	}
+	if !strings.Contains(capturedPrompt, "Runbook") {
+		t.Errorf("system prompt missing document title 'Runbook'\ngot: %s", capturedPrompt[:min(len(capturedPrompt), 600)])
+	}
+	if !strings.Contains(capturedPrompt, "Deploy with ./ship.sh") {
+		t.Errorf("system prompt missing document body content\ngot: %s", capturedPrompt[:min(len(capturedPrompt), 600)])
+	}
+}
+
+// TestReplyToNoDocumentsNoSpaceKnowledge verifies that when a space has no documents,
+// the Chat auto-reply system prompt does NOT include a "## Space Knowledge" section.
+func TestReplyToNoDocumentsNoSpaceKnowledge(t *testing.T) {
+	db, store := testDB(t)
+	ctx := t.Context()
+
+	mind := NewMind(db, store, "fake-token")
+
+	agentName := "ReplyNoDocTestAgent"
+	agentID := "reply-no-doc-test-agent-id"
+
+	db.ExecContext(ctx, `DELETE FROM users WHERE id = $1`, agentID)
+	_, err := db.ExecContext(ctx,
+		`INSERT INTO users (id, google_id, email, name, kind) VALUES ($1, $2, $3, $4, 'agent')`,
+		agentID, "agent:"+agentName, agentName+"@test.lovyou.ai", agentName)
+	if err != nil {
+		t.Fatalf("create agent: %v", err)
+	}
+	t.Cleanup(func() { db.ExecContext(ctx, `DELETE FROM users WHERE id = $1`, agentID) })
+
+	space, err := store.CreateSpace(ctx, "reply-no-doc-test", "Reply No Doc Test", "", "owner", "project", "public")
+	if err != nil {
+		t.Fatalf("create space: %v", err)
+	}
+	t.Cleanup(func() { store.DeleteSpace(ctx, space.ID) })
+
+	// No documents seeded — space is empty.
+
+	convo, err := store.CreateNode(ctx, CreateNodeParams{
+		SpaceID: space.ID, Kind: KindConversation,
+		Title: "Empty Space Chat", Author: "Human", AuthorID: "human-id", AuthorKind: "human",
+		Tags: []string{"human-id", agentID},
+	})
+	if err != nil {
+		t.Fatalf("create conversation: %v", err)
+	}
+
+	var capturedPrompt string
+	mind.callClaudeOverride = func(_ context.Context, systemPrompt string, _ []claudeMessage) (string, error) {
+		capturedPrompt = systemPrompt
+		return "ok", nil
+	}
+
+	mind.OnMessage(space.ID, space.Slug, convo, "human-id")
+
+	if capturedPrompt == "" {
+		t.Fatal("callClaude was never called — check agent participant lookup")
+	}
+	if strings.Contains(capturedPrompt, "Space Knowledge") {
+		t.Errorf("system prompt should not contain 'Space Knowledge' when space has no docs\ngot: %s", capturedPrompt[:min(len(capturedPrompt), 400)])
+	}
+}
+
+// TestMindOnQuestionAsked_NoAgent verifies graceful no-op when no agent exists.
+func TestMindOnQuestionAsked_NoAgent(t *testing.T) {
+	db, store := testDB(t)
+	ctx := t.Context()
+	mind := NewMind(db, store, "fake-token")
+
+	space, err := store.CreateSpace(ctx, "question-no-agent-test", "QA No Agent", "", "owner", "project", "public")
+	if err != nil {
+		t.Fatalf("create space: %v", err)
+	}
+	t.Cleanup(func() { store.DeleteSpace(ctx, space.ID) })
+
+	question := &Node{
+		ID:    "test-q-id",
+		Title: "Why does this work?",
+		Body:  "Curious about the mechanics.",
+	}
+
+	// Should not panic even with no agents and a fake Claude token.
+	mind.OnQuestionAsked(space.ID, space.Slug, question)
+	// No agent → returns early without creating any nodes.
+	answers, _ := store.ListNodes(ctx, ListNodesParams{SpaceID: space.ID, ParentID: question.ID})
+	if len(answers) != 0 {
+		t.Errorf("got %d answers, want 0 (no agent available)", len(answers))
 	}
 }

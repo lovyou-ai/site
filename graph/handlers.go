@@ -92,6 +92,11 @@ func (h *Handlers) Register(mux *http.ServeMux) {
 	mux.Handle("GET /app/{slug}/roles", h.readWrap(h.handleRoles))
 	mux.Handle("GET /app/{slug}/teams", h.readWrap(h.handleTeams))
 	mux.Handle("GET /app/{slug}/policies", h.readWrap(h.handlePolicies))
+	mux.Handle("GET /app/{slug}/documents", h.readWrap(h.handleDocuments))
+	mux.Handle("GET /app/{slug}/document/{id}/edit", h.writeWrap(h.handleDocumentEdit))
+	mux.Handle("POST /app/{slug}/document/{id}/edit", h.writeWrap(h.handleDocumentEdit))
+	mux.Handle("GET /app/{slug}/questions", h.readWrap(h.handleQuestions))
+	mux.Handle("GET /app/{slug}/questions/{id}", h.readWrap(h.handleQuestionDetail))
 
 	// Conversation detail (optional auth).
 	mux.Handle("GET /app/{slug}/conversation/{id}", h.readWrap(h.handleConversationDetail))
@@ -1185,8 +1190,25 @@ func (h *Handlers) handleKnowledge(w http.ResponseWriter, r *http.Request) {
 		challengeCounts[c.ID] = h.store.CountChallenges(r.Context(), c.ID)
 	}
 
+	// Fetch documents and questions for the unified knowledge view (BOUNDED: Limit 50 each).
+	docs, _ := h.store.ListNodes(r.Context(), ListNodesParams{
+		SpaceID: space.ID,
+		Kind:    KindDocument,
+		Limit:   50,
+	})
+	questions, _ := h.store.ListNodes(r.Context(), ListNodesParams{
+		SpaceID: space.ID,
+		Kind:    KindQuestion,
+		Limit:   50,
+	})
+
 	if wantsJSON(r) {
-		writeJSON(w, http.StatusOK, map[string]any{"space": space, "claims": claims})
+		writeJSON(w, http.StatusOK, map[string]any{
+			"space":     space,
+			"claims":    claims,
+			"documents": docs,
+			"questions": questions,
+		})
 		return
 	}
 
@@ -1501,6 +1523,172 @@ func (h *Handlers) handlePolicies(w http.ResponseWriter, r *http.Request) {
 	PoliciesView(*space, spaces, policies, h.viewUser(r), isOwner, searchQuery).Render(r.Context(), w)
 }
 
+func (h *Handlers) handleDocuments(w http.ResponseWriter, r *http.Request) {
+	space, isOwner, err := h.spaceForRead(r)
+	if errors.Is(err, ErrNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	spaces, _ := h.store.ListSpaces(r.Context(), h.userID(r))
+	searchQuery := r.URL.Query().Get("q")
+
+	documents, err := h.store.ListNodes(r.Context(), ListNodesParams{
+		SpaceID:  space.ID,
+		Kind:     KindDocument,
+		ParentID: "root",
+		Query:    searchQuery,
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if wantsJSON(r) {
+		writeJSON(w, http.StatusOK, map[string]any{"space": space, "documents": documents})
+		return
+	}
+
+	DocumentsView(*space, spaces, documents, h.viewUser(r), isOwner, searchQuery).Render(r.Context(), w)
+}
+
+func (h *Handlers) handleDocumentEdit(w http.ResponseWriter, r *http.Request) {
+	space, err := h.spaceFromRequest(r)
+	if errors.Is(err, ErrNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	nodeID := r.PathValue("id")
+	node, err := h.store.GetNode(r.Context(), nodeID)
+	if errors.Is(err, ErrNotFound) || node == nil {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if node.Kind != KindDocument {
+		http.NotFound(w, r)
+		return
+	}
+
+	if r.Method == http.MethodPost {
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		title := r.FormValue("title")
+		body := r.FormValue("body")
+		if err := h.store.UpdateNode(r.Context(), nodeID, &title, &body, nil, nil, nil); err != nil {
+			if errors.Is(err, ErrNotFound) {
+				http.NotFound(w, r)
+				return
+			}
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if wantsJSON(r) {
+			updated, _ := h.store.GetNode(r.Context(), nodeID)
+			writeJSON(w, http.StatusOK, map[string]any{"node": updated})
+			return
+		}
+		http.Redirect(w, r, fmt.Sprintf("/app/%s/node/%s", space.Slug, nodeID), http.StatusSeeOther)
+		return
+	}
+
+	spaces, _ := h.store.ListSpaces(r.Context(), h.userID(r))
+	DocumentEditView(*space, spaces, *node, h.viewUser(r)).Render(r.Context(), w)
+}
+
+func (h *Handlers) handleQuestions(w http.ResponseWriter, r *http.Request) {
+	space, isOwner, err := h.spaceForRead(r)
+	if errors.Is(err, ErrNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	spaces, _ := h.store.ListSpaces(r.Context(), h.userID(r))
+	searchQuery := r.URL.Query().Get("q")
+
+	questions, err := h.store.ListNodes(r.Context(), ListNodesParams{
+		SpaceID:  space.ID,
+		Kind:     KindQuestion,
+		ParentID: "root",
+		Query:    searchQuery,
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if wantsJSON(r) {
+		writeJSON(w, http.StatusOK, map[string]any{"space": space, "questions": questions})
+		return
+	}
+
+	QuestionsView(*space, spaces, questions, h.viewUser(r), isOwner, searchQuery).Render(r.Context(), w)
+}
+
+func (h *Handlers) handleQuestionDetail(w http.ResponseWriter, r *http.Request) {
+	space, isOwner, err := h.spaceForRead(r)
+	if errors.Is(err, ErrNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	spaces, _ := h.store.ListSpaces(r.Context(), h.userID(r))
+	id := r.PathValue("id")
+
+	question, err := h.store.GetNode(r.Context(), id)
+	if errors.Is(err, ErrNotFound) || (err == nil && question.Kind != KindQuestion) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if question.SpaceID != space.ID {
+		http.NotFound(w, r)
+		return
+	}
+
+	answers, err := h.store.ListNodes(r.Context(), ListNodesParams{
+		SpaceID:  space.ID,
+		ParentID: id,
+		Limit:    200,
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if wantsJSON(r) {
+		writeJSON(w, http.StatusOK, map[string]any{"space": space, "question": question, "answers": answers})
+		return
+	}
+
+	QuestionDetailView(*space, spaces, *question, answers, h.viewUser(r), isOwner).Render(r.Context(), w)
+}
+
 func (h *Handlers) handleGovernance(w http.ResponseWriter, r *http.Request) {
 	space, isOwner, err := h.spaceForRead(r)
 	if errors.Is(err, ErrNotFound) {
@@ -1783,7 +1971,7 @@ func (h *Handlers) handleOp(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		nodeKind := r.FormValue("kind")
-		if nodeKind != KindProject && nodeKind != KindGoal && nodeKind != KindRole && nodeKind != KindTeam && nodeKind != KindPolicy {
+		if nodeKind != KindProject && nodeKind != KindGoal && nodeKind != KindRole && nodeKind != KindTeam && nodeKind != KindPolicy && nodeKind != KindDocument && nodeKind != KindQuestion {
 			nodeKind = KindTask // default
 		}
 		node, err := h.store.CreateNode(ctx, CreateNodeParams{
@@ -1873,6 +2061,36 @@ func (h *Handlers) handleOp(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "title or body required", http.StatusBadRequest)
 			return
 		}
+
+		// express with kind=question creates a KindQuestion and triggers auto-answer.
+		if r.FormValue("kind") == KindQuestion {
+			node, err := h.store.CreateNode(ctx, CreateNodeParams{
+				SpaceID:    space.ID,
+				Kind:       KindQuestion,
+				Title:      title,
+				Body:       body,
+				Author:     actor,
+				AuthorID:   actorID,
+				AuthorKind: actorKind,
+			})
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			h.store.RecordOp(ctx, space.ID, node.ID, actor, actorID, "express", nil)
+
+			if h.mind != nil {
+				go h.mind.OnQuestionAsked(space.ID, space.Slug, node)
+			}
+
+			if wantsJSON(r) {
+				writeJSON(w, http.StatusCreated, map[string]any{"node": node, "op": "express"})
+				return
+			}
+			http.Redirect(w, r, fmt.Sprintf("/app/%s/questions/%s", space.Slug, node.ID), http.StatusSeeOther)
+			return
+		}
+
 		quoteOfID := strings.TrimSpace(r.FormValue("quote_of_id"))
 		node, err := h.store.CreateNode(ctx, CreateNodeParams{
 			SpaceID:    space.ID,

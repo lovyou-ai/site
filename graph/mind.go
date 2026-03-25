@@ -20,6 +20,9 @@ type Mind struct {
 	store        *Store
 	token        string        // Claude OAuth token
 	replyTimeout time.Duration // timeout for Claude CLI calls
+	// callClaudeOverride is set in tests to stub out the Claude CLI without a real token.
+	// When non-nil, callClaude dispatches here instead of exec-ing the claude binary.
+	callClaudeOverride func(ctx context.Context, systemPrompt string, messages []claudeMessage) (string, error)
 }
 
 // NewMind creates a Mind that auto-replies in agent conversations.
@@ -76,6 +79,79 @@ func (m *Mind) OnMessage(spaceID, spaceSlug string, convo *Node, senderID string
 	if err := m.replyTo(ctx, spaceID, spaceSlug, convo, agentID, agentName); err != nil {
 		log.Printf("mind: reply to %q: %v", convo.Title, err)
 	}
+}
+
+// OnQuestionAsked is called when a KindQuestion is created via the express op.
+// It queries the space's documents for context and generates an agent answer asynchronously.
+func (m *Mind) OnQuestionAsked(spaceID, spaceSlug string, question *Node) {
+	ctx, cancel := context.WithTimeout(context.Background(), m.replyTimeout)
+	defer cancel()
+
+	agentID, agentName, err := m.store.GetFirstAgent(ctx)
+	if err != nil || agentID == "" {
+		log.Printf("mind: no agent available to answer question %s", question.ID)
+		return
+	}
+
+	docs, err := m.store.ListDocumentContext(ctx, spaceID)
+	if err != nil {
+		log.Printf("mind: list docs for question %q: %v", question.Title, err)
+		docs = nil
+	}
+
+	systemPrompt := m.buildQuestionAnswerPrompt(question, docs)
+	messages := []claudeMessage{{
+		Role:    "user",
+		Content: fmt.Sprintf("Question: %s\n\nAdditional context: %s\n\nAnswer this question based on the space documents provided, or from your general knowledge if no relevant documents exist. Be concise and helpful.", question.Title, question.Body),
+	}}
+
+	response, err := m.callClaude(ctx, systemPrompt, messages)
+	if err != nil {
+		log.Printf("mind: answer question %q: %v", question.Title, err)
+		return
+	}
+
+	node, err := m.store.CreateNode(ctx, CreateNodeParams{
+		SpaceID:    spaceID,
+		ParentID:   question.ID,
+		Kind:       KindComment,
+		Body:       response,
+		Author:     agentName,
+		AuthorID:   agentID,
+		AuthorKind: "agent",
+	})
+	if err != nil {
+		log.Printf("mind: create answer for question %q: %v", question.Title, err)
+		return
+	}
+
+	m.store.RecordOp(ctx, spaceID, node.ID, agentName, agentID, "respond", nil)
+	log.Printf("mind: answered question %q as %s (node %s)", question.Title, agentName, node.ID)
+}
+
+// buildQuestionAnswerPrompt builds the system prompt for answering a question,
+// injecting available KindDocument context from the space.
+func (m *Mind) buildQuestionAnswerPrompt(question *Node, docs []Node) string {
+	var sys strings.Builder
+	sys.WriteString(mindSoul)
+	sys.WriteString("\n== ROLE ==\n")
+	sys.WriteString("You are answering a question posted in a space. Be helpful, clear, and grounded in the documents provided.\n")
+	sys.WriteString("Write your answer in plain prose. Do not include the question text in your answer.\n")
+
+	if len(docs) > 0 {
+		sys.WriteString("\n== SPACE DOCUMENTS ==\n")
+		sys.WriteString("The following documents exist in this space. Use them to ground your answer where relevant:\n\n")
+		for _, doc := range docs {
+			sys.WriteString(fmt.Sprintf("### %s\n%s\n\n", doc.Title, truncateStr(doc.Body, 1000)))
+		}
+	}
+
+	sys.WriteString("\n== QUESTION ==\n")
+	sys.WriteString(fmt.Sprintf("Title: %s\n", question.Title))
+	if question.Body != "" {
+		sys.WriteString(fmt.Sprintf("Context: %s\n", question.Body))
+	}
+	return sys.String()
 }
 
 // OnTaskAssigned is called when a task is assigned to a user.
@@ -282,7 +358,13 @@ func (m *Mind) replyTo(ctx context.Context, spaceID, spaceSlug string, convo *No
 		return fmt.Errorf("list messages: %w", err)
 	}
 
-	systemPrompt := m.buildSystemPrompt(convo, agentID)
+	docs, err := m.store.ListDocumentContext(ctx, spaceID)
+	if err != nil {
+		log.Printf("mind: list docs for auto-reply %q: %v", convo.Title, err)
+		docs = nil
+	}
+
+	systemPrompt := m.buildSystemPrompt(convo, agentID, docs)
 	claudeMessages := m.buildMessages(convo, messages, agentID)
 
 	response, err := m.callClaude(ctx, systemPrompt, claudeMessages)
@@ -368,12 +450,108 @@ func (m *Mind) replyTo(ctx context.Context, spaceID, spaceSlug string, convo *No
 			}
 		}
 		if humanUserID != "" {
-			memory := fmt.Sprintf("Spoke with this user in conversation %q", truncateStr(convo.Title, 80))
-			m.store.RememberForPersona(ctx, role, humanUserID, "context", memory, convo.ID, 5)
+			go m.extractAndSaveMemories(role, humanUserID, convo.ID, messages, agentID)
 		}
 	}
 
 	return nil
+}
+
+// memoryExtract is a single memory extracted from a conversation exchange.
+type memoryExtract struct {
+	Kind       string `json:"kind"`       // "fact" | "preference" | "context"
+	Content    string `json:"content"`
+	Importance int    `json:"importance"` // 1-5
+}
+
+// extractAndSaveMemories calls Claude to extract up to 3 durable facts or
+// preferences about the user from the conversation exchange, then persists them.
+// Safe to call in a goroutine — uses its own timeout context.
+func (m *Mind) extractAndSaveMemories(persona, humanUserID, convoID string, messages []Node, agentID string) {
+	excerpt := messages
+	if len(excerpt) > 6 {
+		excerpt = excerpt[len(excerpt)-6:]
+	}
+	if len(excerpt) == 0 {
+		return
+	}
+
+	var msgText strings.Builder
+	for _, msg := range excerpt {
+		label := "User"
+		if msg.AuthorID == agentID {
+			label = "Agent"
+		}
+		msgText.WriteString(fmt.Sprintf("%s: %s\n", label, truncateStr(msg.Body, 200)))
+	}
+
+	sysPrompt := `You extract durable facts about a user from conversations. Return a JSON array of up to 3 items.
+Each item must have:
+- "kind": one of "fact" (stated information), "preference" (stated preference), or "context" (what the user is working on)
+- "content": one sentence summary
+- "importance": integer 1-5 (5 = highly important, 1 = minor detail)
+Focus on: name, role, stated preferences, goals, or facts about the user.
+If nothing notable, return an empty array: []`
+	userMsg := "Extract up to 3 memories about the user from this conversation:\n\n" + msgText.String()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	result, err := m.callClaude(ctx, sysPrompt, []claudeMessage{{Role: "user", Content: userMsg}})
+	if err != nil {
+		log.Printf("mind: memory extraction: %v", err)
+		return
+	}
+
+	result = strings.TrimSpace(result)
+	if result == "" {
+		return
+	}
+
+	// Extract JSON array from response (may be wrapped in ```json blocks).
+	jsonStr := result
+	if idx := strings.Index(jsonStr, "```json"); idx >= 0 {
+		jsonStr = jsonStr[idx+7:]
+		if end := strings.Index(jsonStr, "```"); end >= 0 {
+			jsonStr = jsonStr[:end]
+		}
+	} else if idx := strings.Index(jsonStr, "["); idx >= 0 {
+		jsonStr = jsonStr[idx:]
+		if end := strings.LastIndex(jsonStr, "]"); end >= 0 {
+			jsonStr = jsonStr[:end+1]
+		}
+	}
+
+	var extracts []memoryExtract
+	if err := json.Unmarshal([]byte(strings.TrimSpace(jsonStr)), &extracts); err != nil {
+		log.Printf("mind: memory extraction parse: %v (response: %s)", err, truncateStr(result, 200))
+		return
+	}
+
+	// Store each extracted memory, capped at 3 (BOUNDED invariant).
+	count := 0
+	for _, e := range extracts {
+		if count >= 3 {
+			break
+		}
+		if e.Content == "" {
+			continue
+		}
+		// Default to "fact" if the LLM returns an unrecognized kind.
+		if !validMemoryKinds[e.Kind] {
+			e.Kind = "fact"
+		}
+		// Clamp importance to 1-5 (matches prompt instructions; LLM output is an external boundary).
+		if e.Importance < 1 {
+			e.Importance = 1
+		} else if e.Importance > 5 {
+			e.Importance = 5
+		}
+		if err := m.store.RememberForPersona(context.Background(), persona, humanUserID, e.Kind, e.Content, convoID, e.Importance); err != nil {
+			log.Printf("mind: save memory %q: %v", e.Content, err)
+		}
+		count++
+	}
 }
 
 func truncateStr(s string, max int) string {
@@ -414,7 +592,7 @@ func extractTaskCommands(response string) (string, []taskCommand) {
 	return strings.TrimSpace(cleaned.String()), tasks
 }
 
-func (m *Mind) buildSystemPrompt(convo *Node, agentID string) string {
+func (m *Mind) buildSystemPrompt(convo *Node, agentID string, docs []Node) string {
 	var sys strings.Builder
 	ctx := context.Background()
 
@@ -444,7 +622,7 @@ func (m *Mind) buildSystemPrompt(convo *Node, agentID string) string {
 			}
 		}
 		if humanUserID != "" {
-			if memories, _ := m.store.RecallForPersona(ctx, role, humanUserID, 10); len(memories) > 0 {
+			if memories, _ := m.store.RecallForPersona(ctx, role, humanUserID, 5); len(memories) > 0 {
 				sys.WriteString("\n== MEMORIES ==\n")
 				for _, mem := range memories {
 					sys.WriteString("- " + mem + "\n")
@@ -471,6 +649,14 @@ func (m *Mind) buildSystemPrompt(convo *Node, agentID string) string {
 				sys.WriteString(work)
 				sys.WriteString("\n")
 			}
+		}
+	}
+
+	if len(docs) > 0 {
+		sys.WriteString("\n## Space Knowledge\n")
+		sys.WriteString("The following documents are available in this space:\n\n")
+		for _, doc := range docs {
+			sys.WriteString(fmt.Sprintf("### %s\n%s\n\n", doc.Title, truncateStr(doc.Body, 1000)))
 		}
 	}
 
@@ -521,6 +707,9 @@ func (m *Mind) buildMessages(convo *Node, messages []Node, agentID string) []cla
 }
 
 func (m *Mind) callClaude(ctx context.Context, systemPrompt string, messages []claudeMessage) (string, error) {
+	if m.callClaudeOverride != nil {
+		return m.callClaudeOverride(ctx, systemPrompt, messages)
+	}
 	var prompt strings.Builder
 	prompt.WriteString(systemPrompt)
 	prompt.WriteString("\n== MESSAGES ==\n")

@@ -263,3 +263,436 @@ func TestParseMessageSearch(t *testing.T) {
 		}
 	}
 }
+
+func TestHandlerDocumentEdit(t *testing.T) {
+	h, store, _ := testHandlers(t)
+
+	mux := http.NewServeMux()
+	h.Register(mux)
+
+	if old, _ := store.GetSpaceBySlug(t.Context(), "handler-doc-edit-test"); old != nil {
+		store.DeleteSpace(t.Context(), old.ID)
+	}
+	// Private space owned by test-user-1 (member).
+	space, err := store.CreateSpace(t.Context(), "handler-doc-edit-test", "Doc Edit Test", "", "test-user-1", "project", "private")
+	if err != nil {
+		t.Fatalf("create space: %v", err)
+	}
+	t.Cleanup(func() { store.DeleteSpace(t.Context(), space.ID) })
+
+	doc, err := store.CreateNode(t.Context(), CreateNodeParams{
+		SpaceID: space.ID, Kind: KindDocument, Title: "Original Title",
+		Body: "Original body.", Author: "Tester", AuthorID: "test-user-1",
+	})
+	if err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+
+	t.Run("get_edit_form_member", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/app/handler-doc-edit-test/document/"+doc.ID+"/edit", nil)
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+		}
+	})
+
+	t.Run("post_edit_member", func(t *testing.T) {
+		form := url.Values{}
+		form.Set("title", "Updated Title")
+		form.Set("body", "Updated body content.")
+
+		req := httptest.NewRequest("POST", "/app/handler-doc-edit-test/document/"+doc.ID+"/edit", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("Accept", "application/json")
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+		}
+
+		var result map[string]any
+		json.NewDecoder(w.Body).Decode(&result)
+		node := result["node"].(map[string]any)
+		if node["title"] != "Updated Title" {
+			t.Errorf("title = %v, want Updated Title", node["title"])
+		}
+		if node["body"] != "Updated body content." {
+			t.Errorf("body = %v, want Updated body content.", node["body"])
+		}
+	})
+
+	t.Run("non_member_rejected", func(t *testing.T) {
+		// Create a second handler set with a different user who is not the space owner.
+		otherUser := &auth.User{ID: "other-user-99", Name: "Other", Email: "other@test.com", Kind: "human"}
+		otherWrap := func(next http.HandlerFunc) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				ctx := auth.ContextWithUser(r.Context(), otherUser)
+				next.ServeHTTP(w, r.WithContext(ctx))
+			})
+		}
+		otherH := NewHandlers(store, otherWrap, otherWrap)
+		otherMux := http.NewServeMux()
+		otherH.Register(otherMux)
+
+		form := url.Values{}
+		form.Set("title", "Should Not Update")
+		form.Set("body", "Should not be saved.")
+
+		req := httptest.NewRequest("POST", "/app/handler-doc-edit-test/document/"+doc.ID+"/edit", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		w := httptest.NewRecorder()
+		otherMux.ServeHTTP(w, req)
+
+		if w.Code != http.StatusNotFound {
+			t.Errorf("status = %d, want %d (non-member should be rejected)", w.Code, http.StatusNotFound)
+		}
+	})
+}
+
+func TestHandlerDocuments(t *testing.T) {
+	h, store, _ := testHandlers(t)
+
+	mux := http.NewServeMux()
+	h.Register(mux)
+
+	if old, _ := store.GetSpaceBySlug(t.Context(), "handler-docs-test"); old != nil {
+		store.DeleteSpace(t.Context(), old.ID)
+	}
+	space, err := store.CreateSpace(t.Context(), "handler-docs-test", "Docs Test", "", "test-user-1", "project", "public")
+	if err != nil {
+		t.Fatalf("create space: %v", err)
+	}
+	t.Cleanup(func() { store.DeleteSpace(t.Context(), space.ID) })
+
+	t.Run("create_document", func(t *testing.T) {
+		body := `{"op":"intend","title":"Architecture Guide","description":"Our system design","kind":"document"}`
+		req := httptest.NewRequest("POST", "/app/handler-docs-test/op", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json")
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+
+		if w.Code != http.StatusCreated {
+			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusCreated, w.Body.String())
+		}
+
+		var result map[string]any
+		json.NewDecoder(w.Body).Decode(&result)
+		node := result["node"].(map[string]any)
+		if node["kind"] != KindDocument {
+			t.Errorf("kind = %v, want %q", node["kind"], KindDocument)
+		}
+		if node["title"] != "Architecture Guide" {
+			t.Errorf("title = %v, want Architecture Guide", node["title"])
+		}
+	})
+
+	t.Run("list_documents", func(t *testing.T) {
+		store.CreateNode(t.Context(), CreateNodeParams{
+			SpaceID: space.ID, Kind: KindDocument, Title: "List Doc",
+			Author: "Tester", AuthorID: "test-user-1",
+		})
+
+		req := httptest.NewRequest("GET", "/app/handler-docs-test/documents", nil)
+		req.Header.Set("Accept", "application/json")
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+		}
+
+		var result map[string]any
+		json.NewDecoder(w.Body).Decode(&result)
+		docs := result["documents"].([]any)
+		if len(docs) == 0 {
+			t.Error("got 0 documents, want at least 1")
+		}
+	})
+
+	t.Run("document_detail", func(t *testing.T) {
+		doc, err := store.CreateNode(t.Context(), CreateNodeParams{
+			SpaceID: space.ID, Kind: KindDocument, Title: "Detail Doc",
+			Body: "# Hello\nThis is content.", Author: "Tester", AuthorID: "test-user-1",
+		})
+		if err != nil {
+			t.Fatalf("create document: %v", err)
+		}
+
+		req := httptest.NewRequest("GET", "/app/handler-docs-test/node/"+doc.ID, nil)
+		req.Header.Set("Accept", "application/json")
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+		}
+
+		var result map[string]any
+		json.NewDecoder(w.Body).Decode(&result)
+		node := result["node"].(map[string]any)
+		if node["id"] != doc.ID {
+			t.Errorf("id = %v, want %v", node["id"], doc.ID)
+		}
+		if node["kind"] != KindDocument {
+			t.Errorf("kind = %v, want %q", node["kind"], KindDocument)
+		}
+	})
+
+	t.Run("search_documents", func(t *testing.T) {
+		store.CreateNode(t.Context(), CreateNodeParams{
+			SpaceID: space.ID, Kind: KindDocument, Title: "Searchable Wiki Page",
+			Body: "Contains the word searchable", Author: "Tester", AuthorID: "test-user-1",
+		})
+		store.CreateNode(t.Context(), CreateNodeParams{
+			SpaceID: space.ID, Kind: KindDocument, Title: "Other Doc",
+			Author: "Tester", AuthorID: "test-user-1",
+		})
+
+		req := httptest.NewRequest("GET", "/app/handler-docs-test/documents?q=Searchable+Wiki", nil)
+		req.Header.Set("Accept", "application/json")
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+		}
+
+		var result map[string]any
+		json.NewDecoder(w.Body).Decode(&result)
+		docs := result["documents"].([]any)
+		if len(docs) == 0 {
+			t.Error("got 0 results for search, want at least 1")
+		}
+		first := docs[0].(map[string]any)
+		if first["title"] != "Searchable Wiki Page" {
+			t.Errorf("first result title = %v, want Searchable Wiki Page", first["title"])
+		}
+	})
+}
+
+func TestHandlerQuestions(t *testing.T) {
+	h, store, _ := testHandlers(t)
+
+	mux := http.NewServeMux()
+	h.Register(mux)
+
+	if old, _ := store.GetSpaceBySlug(t.Context(), "handler-qa-test"); old != nil {
+		store.DeleteSpace(t.Context(), old.ID)
+	}
+	space, err := store.CreateSpace(t.Context(), "handler-qa-test", "Q&A Test", "", "test-user-1", "project", "public")
+	if err != nil {
+		t.Fatalf("create space: %v", err)
+	}
+	t.Cleanup(func() { store.DeleteSpace(t.Context(), space.ID) })
+
+	t.Run("create_question", func(t *testing.T) {
+		body := `{"op":"intend","title":"How does the event graph work?","description":"Looking for an overview of the architecture","kind":"question"}`
+		req := httptest.NewRequest("POST", "/app/handler-qa-test/op", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json")
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+
+		if w.Code != http.StatusCreated {
+			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusCreated, w.Body.String())
+		}
+
+		var result map[string]any
+		json.NewDecoder(w.Body).Decode(&result)
+		node := result["node"].(map[string]any)
+		if node["kind"] != KindQuestion {
+			t.Errorf("kind = %v, want %q", node["kind"], KindQuestion)
+		}
+		if node["title"] != "How does the event graph work?" {
+			t.Errorf("title = %v, want How does the event graph work?", node["title"])
+		}
+	})
+
+	t.Run("list_questions", func(t *testing.T) {
+		store.CreateNode(t.Context(), CreateNodeParams{
+			SpaceID: space.ID, Kind: KindQuestion, Title: "What is causality?",
+			Author: "Tester", AuthorID: "test-user-1",
+		})
+
+		req := httptest.NewRequest("GET", "/app/handler-qa-test/questions", nil)
+		req.Header.Set("Accept", "application/json")
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+		}
+
+		var result map[string]any
+		json.NewDecoder(w.Body).Decode(&result)
+		questions := result["questions"].([]any)
+		if len(questions) == 0 {
+			t.Error("got 0 questions, want at least 1")
+		}
+	})
+
+	t.Run("question_detail", func(t *testing.T) {
+		q, err := store.CreateNode(t.Context(), CreateNodeParams{
+			SpaceID: space.ID, Kind: KindQuestion, Title: "Why use signed events?",
+			Body: "Curious about the integrity model.", Author: "Tester", AuthorID: "test-user-1",
+		})
+		if err != nil {
+			t.Fatalf("create question: %v", err)
+		}
+
+		req := httptest.NewRequest("GET", "/app/handler-qa-test/questions/"+q.ID, nil)
+		req.Header.Set("Accept", "application/json")
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+		}
+
+		var result map[string]any
+		json.NewDecoder(w.Body).Decode(&result)
+		node := result["question"].(map[string]any)
+		if node["id"] != q.ID {
+			t.Errorf("id = %v, want %v", node["id"], q.ID)
+		}
+		if node["kind"] != KindQuestion {
+			t.Errorf("kind = %v, want %q", node["kind"], KindQuestion)
+		}
+	})
+}
+
+// TestHandlerExpressQuestion verifies that express op with kind=question creates a KindQuestion.
+func TestHandlerExpressQuestion(t *testing.T) {
+	h, store, _ := testHandlers(t)
+
+	mux := http.NewServeMux()
+	h.Register(mux)
+
+	if old, _ := store.GetSpaceBySlug(t.Context(), "handler-express-qa-test"); old != nil {
+		store.DeleteSpace(t.Context(), old.ID)
+	}
+	space, err := store.CreateSpace(t.Context(), "handler-express-qa-test", "Express Q&A Test", "", "test-user-1", "project", "public")
+	if err != nil {
+		t.Fatalf("create space: %v", err)
+	}
+	t.Cleanup(func() { store.DeleteSpace(t.Context(), space.ID) })
+
+	t.Run("express_kind_question_creates_question", func(t *testing.T) {
+		body := `{"op":"express","title":"What is an event graph?","body":"Looking for a brief overview","kind":"question"}`
+		req := httptest.NewRequest("POST", "/app/handler-express-qa-test/op", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json")
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+
+		if w.Code != http.StatusCreated {
+			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusCreated, w.Body.String())
+		}
+
+		var result map[string]any
+		json.NewDecoder(w.Body).Decode(&result)
+		node := result["node"].(map[string]any)
+		if node["kind"] != KindQuestion {
+			t.Errorf("kind = %v, want %q", node["kind"], KindQuestion)
+		}
+		if node["title"] != "What is an event graph?" {
+			t.Errorf("title = %v, want 'What is an event graph?'", node["title"])
+		}
+		if result["op"] != "express" {
+			t.Errorf("op = %v, want 'express'", result["op"])
+		}
+	})
+
+	t.Run("express_no_kind_creates_post", func(t *testing.T) {
+		body := `{"op":"express","body":"A post without a kind"}`
+		req := httptest.NewRequest("POST", "/app/handler-express-qa-test/op", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json")
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+
+		if w.Code != http.StatusCreated {
+			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusCreated, w.Body.String())
+		}
+
+		var result map[string]any
+		json.NewDecoder(w.Body).Decode(&result)
+		node := result["node"].(map[string]any)
+		if node["kind"] != KindPost {
+			t.Errorf("kind = %v, want %q", node["kind"], KindPost)
+		}
+	})
+}
+
+// TestHandlerKnowledgeLens verifies the knowledge lens returns documents and questions
+// alongside claims, with LIMIT bounds applied (Invariant 13: BOUNDED).
+func TestHandlerKnowledgeLens(t *testing.T) {
+	h, store, _ := testHandlers(t)
+
+	mux := http.NewServeMux()
+	h.Register(mux)
+
+	if old, _ := store.GetSpaceBySlug(t.Context(), "handler-knowledge-lens-test"); old != nil {
+		store.DeleteSpace(t.Context(), old.ID)
+	}
+	space, err := store.CreateSpace(t.Context(), "handler-knowledge-lens-test", "Knowledge Lens Test", "", "test-user-1", "project", "public")
+	if err != nil {
+		t.Fatalf("create space: %v", err)
+	}
+	t.Cleanup(func() { store.DeleteSpace(t.Context(), space.ID) })
+
+	// Seed a document, a question, and a claim.
+	store.CreateNode(t.Context(), CreateNodeParams{
+		SpaceID: space.ID, Kind: KindDocument, Title: "Team Playbook",
+		Body: "How we work.", Author: "Tester", AuthorID: "test-user-1", AuthorKind: "human",
+	})
+	store.CreateNode(t.Context(), CreateNodeParams{
+		SpaceID: space.ID, Kind: KindQuestion, Title: "What is the mission?",
+		Author: "Tester", AuthorID: "test-user-1", AuthorKind: "human",
+	})
+	store.CreateNode(t.Context(), CreateNodeParams{
+		SpaceID: space.ID, Kind: KindClaim, Title: "Event graphs are scalable",
+		Author: "Tester", AuthorID: "test-user-1", AuthorKind: "human",
+	})
+
+	req := httptest.NewRequest("GET", "/app/handler-knowledge-lens-test/knowledge", nil)
+	req.Header.Set("Accept", "application/json")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var result map[string]any
+	json.NewDecoder(w.Body).Decode(&result)
+
+	docs, ok := result["documents"].([]any)
+	if !ok {
+		t.Fatal("knowledge lens response missing 'documents' field")
+	}
+	if len(docs) == 0 {
+		t.Error("knowledge lens: got 0 documents, want at least 1")
+	}
+
+	questions, ok := result["questions"].([]any)
+	if !ok {
+		t.Fatal("knowledge lens response missing 'questions' field")
+	}
+	if len(questions) == 0 {
+		t.Error("knowledge lens: got 0 questions, want at least 1")
+	}
+
+	// Invariant 13 (BOUNDED): both lists must be within the declared LIMIT of 50.
+	const knowledgeLensLimit = 50
+	if len(docs) > knowledgeLensLimit {
+		t.Errorf("knowledge lens: documents count %d exceeds BOUNDED limit %d", len(docs), knowledgeLensLimit)
+	}
+	if len(questions) > knowledgeLensLimit {
+		t.Errorf("knowledge lens: questions count %d exceeds BOUNDED limit %d", len(questions), knowledgeLensLimit)
+	}
+}

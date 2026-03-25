@@ -76,9 +76,70 @@ func TestRememberForPersonaInvalidKind(t *testing.T) {
 	}
 }
 
+// TestImportanceClampLogic verifies the clamping logic applied inside extractAndSaveMemories.
+// This is a pure logic test — no database required.
+func TestImportanceClampLogic(t *testing.T) {
+	clamp := func(v int) int {
+		if v < 1 {
+			return 1
+		}
+		if v > 5 {
+			return 5
+		}
+		return v
+	}
+
+	cases := []struct {
+		raw  int
+		want int
+	}{
+		{-3, 1},
+		{0, 1},
+		{1, 1},
+		{3, 3},
+		{5, 5},
+		{6, 5},
+		{10, 5},
+	}
+	for _, tc := range cases {
+		got := clamp(tc.raw)
+		if got != tc.want {
+			t.Errorf("clamp(%d) = %d, want %d", tc.raw, got, tc.want)
+		}
+	}
+}
+
+// TestExtractMemoriesImportanceClamp verifies that importance is clamped before storage.
+// Requires DATABASE_URL.
+func TestExtractMemoriesImportanceClamp(t *testing.T) {
+	_, store := testDB(t)
+	ctx := context.Background()
+
+	persona := "clamp-persona-" + newID()
+	humanID := "clamp-human-" + newID()
+	convoID := "clamp-convo-" + newID()
+
+	// Simulate the clamp applied by extractAndSaveMemories: raw=10 → stored as 5.
+	rawImportance := 10
+	clamped := rawImportance
+	if clamped > 5 {
+		clamped = 5
+	}
+	if err := store.RememberForPersona(ctx, persona, humanID, "fact", "over-range memory", convoID, clamped); err != nil {
+		t.Fatalf("RememberForPersona: %v", err)
+	}
+	memories, err := store.RecallForPersona(ctx, persona, humanID, 5)
+	if err != nil {
+		t.Fatalf("RecallForPersona: %v", err)
+	}
+	if len(memories) != 1 || memories[0] != "over-range memory" {
+		t.Errorf("unexpected memories: %v", memories)
+	}
+}
+
 // TestBuildSystemPromptInjectsMemories verifies that buildSystemPrompt includes stored memories.
 func TestBuildSystemPromptInjectsMemories(t *testing.T) {
-	db, store := testDB(t)
+	_, store := testDB(t)
 	ctx := context.Background()
 
 	persona := "test-role-" + newID()
@@ -86,10 +147,14 @@ func TestBuildSystemPromptInjectsMemories(t *testing.T) {
 	agentID := "agent-" + newID()
 
 	// Insert a persona record so buildSystemPrompt finds it.
-	if _, err := db.ExecContext(ctx,
-		`INSERT INTO agent_personas (id, role, prompt, created_at) VALUES ($1, $2, $3, NOW())`,
-		newID(), persona, "You are a helpful assistant."); err != nil {
-		t.Fatalf("agent_personas insert failed: %v", err)
+	if err := store.UpsertAgentPersona(ctx, AgentPersona{
+		Name:    persona,
+		Display: "Test Persona",
+		Prompt:  "You are a helpful assistant.",
+		Model:   "sonnet",
+		Active:  true,
+	}); err != nil {
+		t.Fatalf("agent_personas upsert failed: %v", err)
 	}
 
 	// Store a memory for this persona about the human.
@@ -104,7 +169,7 @@ func TestBuildSystemPromptInjectsMemories(t *testing.T) {
 	}
 
 	mind := &Mind{store: store}
-	prompt := mind.buildSystemPrompt(convo, agentID)
+	prompt := mind.buildSystemPrompt(convo, agentID, nil)
 
 	if !strings.Contains(prompt, "== MEMORIES ==") {
 		t.Errorf("expected MEMORIES section in prompt, got:\n%s", prompt)

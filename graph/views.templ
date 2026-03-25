@@ -126,6 +126,8 @@ templ appLayout(space Space, spaces []Space, activeLens string, user ViewUser) {
 					@mobileLensTab(space.Slug, "roles", "Roles", activeLens)
 					@mobileLensTab(space.Slug, "teams", "Teams", activeLens)
 					@mobileLensTab(space.Slug, "policies", "Policies", activeLens)
+					@mobileLensTab(space.Slug, "documents", "Docs", activeLens)
+					@mobileLensTab(space.Slug, "questions", "Q&A", activeLens)
 					@mobileLensTab(space.Slug, "changelog", "Build", activeLens)
 					@mobileLensTab(space.Slug, "activity", "Activity", activeLens)
 					@mobileLensTab(space.Slug, "settings", "Settings", activeLens)
@@ -170,6 +172,8 @@ templ appLayout(space Space, spaces []Space, activeLens string, user ViewUser) {
 								@lensLink(space.Slug, "roles", "Roles", activeLens, rolesIcon())
 								@lensLink(space.Slug, "teams", "Teams", activeLens, teamsIcon())
 								@lensLink(space.Slug, "policies", "Policies", activeLens, policiesIcon())
+								@lensLink(space.Slug, "documents", "Docs", activeLens, documentsIcon())
+								@lensLink(space.Slug, "questions", "Q&A", activeLens, questionsIcon())
 								@lensLink(space.Slug, "changelog", "Build", activeLens, changelogIcon())
 								@lensLink(space.Slug, "activity", "Activity", activeLens, activityIcon())
 							</nav>
@@ -468,6 +472,18 @@ templ teamsIcon() {
 templ policiesIcon() {
 	<svg class="w-4 h-4 text-warm-faint" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 		<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+	</svg>
+}
+
+templ documentsIcon() {
+	<svg class="w-4 h-4 text-warm-faint" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+		<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+	</svg>
+}
+
+templ questionsIcon() {
+	<svg class="w-4 h-4 text-warm-faint" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+		<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
 	</svg>
 }
 
@@ -1674,7 +1690,7 @@ templ boardOnboarding(spaceSlug string, agents []AgentPersona) {
 				}
 			</div>
 			<form action={ templ.SafeURL("/app/" + spaceSlug + "/op") } method="POST" class="bg-surface rounded-lg border border-edge p-4 space-y-3">
-				<input type="hidden" name="op" value="intend"/>
+				<input type="hidden" name="op" value="express"/>
 				<input type="text" id="onboarding-title" name="title" placeholder="Task title" required
 					class="w-full text-sm px-3 py-2 bg-elevated border border-edge rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent text-warm placeholder-warm-faint"/>
 				if len(agents) > 0 {
@@ -1748,7 +1764,7 @@ templ newTaskInline(spaceSlug string, agents []AgentPersona) {
 			hx-on::after-request="if(event.detail.successful) { this.reset(); document.getElementById('new-task-form').classList.add('hidden'); }"
 			class="bg-surface rounded-lg border border-edge shadow-sm p-3 space-y-2"
 		>
-			<input type="hidden" name="op" value="intend"/>
+			<input type="hidden" name="op" value="express"/>
 			<input type="text" name="title" placeholder="Task title" required
 				class="w-full text-sm px-2 py-1.5 bg-elevated border border-edge rounded-md focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent text-warm placeholder-warm-faint"/>
 			<textarea name="description" placeholder="Description (optional — helps agents understand the task)" rows="2"
@@ -2025,7 +2041,7 @@ templ GoalsView(space Space, spaces []Space, goals []GoalWithProjects, user View
 				<div id="new-goal-form" class="hidden">
 					<form method="POST" action={ templ.SafeURL("/app/" + space.Slug + "/op") }
 						class="bg-surface rounded-lg border border-edge p-4 space-y-3">
-						<input type="hidden" name="op" value="intend"/>
+						<input type="hidden" name="op" value="express"/>
 						<input type="hidden" name="kind" value="goal"/>
 						<input type="text" name="title" placeholder="What do you want to achieve?" required
 							class="w-full text-sm px-3 py-2 bg-elevated border border-edge rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent text-warm placeholder-warm-faint"/>
@@ -2276,7 +2292,7 @@ templ ProjectsView(space Space, spaces []Space, projects []Node, user ViewUser, 
 						action={ templ.SafeURL("/app/" + space.Slug + "/op") }
 						class="bg-surface rounded-lg border border-edge p-4 space-y-3"
 					>
-						<input type="hidden" name="op" value="intend"/>
+						<input type="hidden" name="op" value="express"/>
 						<input type="hidden" name="kind" value="project"/>
 						<input type="text" name="title" placeholder="Project name" required
 							class="w-full text-sm px-3 py-2 bg-elevated border border-edge rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent text-warm placeholder-warm-faint"/>
@@ -2352,7 +2368,7 @@ templ RolesView(space Space, spaces []Space, roles []Node, user ViewUser, isOwne
 				<div id="new-role-form" class="hidden">
 					<form method="POST" action={ templ.SafeURL("/app/" + space.Slug + "/op") }
 						class="bg-surface rounded-lg border border-edge p-4 space-y-3">
-						<input type="hidden" name="op" value="intend"/>
+						<input type="hidden" name="op" value="express"/>
 						<input type="hidden" name="kind" value="role"/>
 						<input type="text" name="title" placeholder="Role name (e.g. Engineer, Moderator)" required
 							class="w-full text-sm px-3 py-2 bg-elevated border border-edge rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent text-warm placeholder-warm-faint"/>
@@ -2425,7 +2441,7 @@ templ TeamsView(space Space, spaces []Space, teams []Node, user ViewUser, isOwne
 				<div id="new-team-form" class="hidden">
 					<form method="POST" action={ templ.SafeURL("/app/" + space.Slug + "/op") }
 						class="bg-surface rounded-lg border border-edge p-4 space-y-3">
-						<input type="hidden" name="op" value="intend"/>
+						<input type="hidden" name="op" value="express"/>
 						<input type="hidden" name="kind" value="team"/>
 						<input type="text" name="title" placeholder="Team name (e.g. Engineering, Design, Growth)" required
 							class="w-full text-sm px-3 py-2 bg-elevated border border-edge rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent text-warm placeholder-warm-faint"/>
@@ -2498,7 +2514,7 @@ templ PoliciesView(space Space, spaces []Space, policies []Node, user ViewUser, 
 				<div id="new-policy-form" class="hidden">
 					<form method="POST" action={ templ.SafeURL("/app/" + space.Slug + "/op") }
 						class="bg-surface rounded-lg border border-edge p-4 space-y-3">
-						<input type="hidden" name="op" value="intend"/>
+						<input type="hidden" name="op" value="express"/>
 						<input type="hidden" name="kind" value="policy"/>
 						<input type="text" name="title" placeholder="Policy name (e.g. Code of Conduct, Privacy Policy)" required
 							class="w-full text-sm px-3 py-2 bg-elevated border border-edge rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent text-warm placeholder-warm-faint"/>
@@ -2539,6 +2555,262 @@ templ PoliciesView(space Space, spaces []Space, policies []Node, user ViewUser, 
 					</div>
 				}
 			</div>
+		</div>
+	}
+}
+
+
+// ── Documents view ───────────────────────────────────────────
+
+templ DocumentsView(space Space, spaces []Space, documents []Node, user ViewUser, isOwner bool, searchQuery string) {
+	@appLayout(space, spaces, "documents", user) {
+		<div class="max-w-3xl mx-auto p-6 space-y-6">
+			<div class="flex items-center justify-between">
+				<h1 class="font-display text-xl font-normal text-warm">Documents</h1>
+				if user.Name != "" && user.Name != "Anonymous" {
+					<button onclick="document.getElementById('new-document-form').classList.toggle('hidden')"
+						class="flex items-center gap-1.5 px-3 py-1.5 bg-brand text-void rounded-lg hover:bg-brand-dark transition-colors text-sm font-medium">
+						<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+						</svg>
+						New document
+					</button>
+				}
+			</div>
+			<form action={ templ.SafeURL("/app/" + space.Slug + "/documents") } method="GET" class="flex gap-2">
+				<input type="text" name="q" value={ searchQuery } placeholder="Search documents..."
+					class="flex-1 px-3 py-1.5 bg-elevated border border-edge rounded-lg text-xs text-warm placeholder-warm-faint focus:outline-none focus:ring-1 focus:ring-brand"/>
+				if searchQuery != "" {
+					<a href={ templ.SafeURL("/app/" + space.Slug + "/documents") } class="text-xs text-warm-faint hover:text-brand transition-colors flex items-center px-2">Clear</a>
+				}
+			</form>
+			if user.Name != "" && user.Name != "Anonymous" {
+				<div id="new-document-form" class="hidden">
+					<form method="POST" action={ templ.SafeURL("/app/" + space.Slug + "/op") }
+						class="bg-surface rounded-lg border border-edge p-4 space-y-3">
+						<input type="hidden" name="op" value="express"/>
+						<input type="hidden" name="kind" value="document"/>
+						<input type="text" name="title" placeholder="Document title" required
+							class="w-full text-sm px-3 py-2 bg-elevated border border-edge rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent text-warm placeholder-warm-faint"/>
+						<textarea name="description" placeholder="Document content (supports Markdown)" rows="4"
+							class="w-full text-sm px-3 py-2 bg-elevated border border-edge rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent resize-none text-warm placeholder-warm-faint font-mono text-xs"></textarea>
+						<div class="flex justify-end">
+							<button type="submit" class="px-4 py-1.5 bg-brand text-void rounded-lg hover:bg-brand-dark transition-colors text-sm font-medium">Create document</button>
+						</div>
+					</form>
+				</div>
+			}
+			<div class="space-y-3">
+				for _, doc := range documents {
+					<a href={ templ.SafeURL(fmt.Sprintf("/app/%s/node/%s", space.Slug, doc.ID)) }
+						class="block bg-surface rounded-lg border border-edge p-4 hover:border-brand/40 hover:shadow-lg hover:shadow-brand/5 hover:-translate-y-0.5 transition-all duration-200">
+						<div class="flex items-center justify-between mb-1">
+							<div class="flex items-center gap-2">
+								<svg class="w-4 h-4 text-brand flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+								</svg>
+								<h3 class="font-medium text-warm">{ doc.Title }</h3>
+							</div>
+						</div>
+						if doc.Body != "" {
+							<p class="text-sm text-warm-muted line-clamp-2 mb-2 ml-6">{ truncate(doc.Body, 150) }</p>
+						}
+						<div class="flex items-center gap-3 text-xs text-warm-faint ml-6">
+							<span>{ doc.Author }</span>
+							<span class="ml-auto">{ doc.CreatedAt.Format("Jan 2") }</span>
+						</div>
+					</a>
+				}
+				if len(documents) == 0 {
+					<div class="text-center py-12 space-y-3">
+						<svg class="w-12 h-12 mx-auto text-warm-faint/30" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+						<p class="text-warm-faint text-sm">No documents yet</p>
+						<p class="text-warm-faint/60 text-xs">Create documents to build your team's wiki and knowledge base.</p>
+					</div>
+				}
+			</div>
+		</div>
+	}
+}
+
+// ── Document edit view ───────────────────────────────────────────
+
+templ DocumentEditView(space Space, spaces []Space, node Node, user ViewUser) {
+	@appLayout(space, spaces, "documents", user) {
+		<div class="max-w-3xl mx-auto p-6 space-y-6">
+			<div class="flex items-center gap-2 text-sm text-warm-faint">
+				<a href={ templ.SafeURL("/app/" + space.Slug + "/documents") } class="hover:text-brand transition-colors">Documents</a>
+				<span>/</span>
+				<a href={ templ.SafeURL(fmt.Sprintf("/app/%s/node/%s", space.Slug, node.ID)) } class="hover:text-brand transition-colors truncate max-w-[200px]">{ node.Title }</a>
+				<span>/</span>
+				<span class="text-warm-secondary">Edit</span>
+			</div>
+			<h1 class="font-display text-xl font-normal text-warm">Edit document</h1>
+			<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/app/%s/document/%s/edit", space.Slug, node.ID)) }
+				class="space-y-4">
+				<div>
+					<label class="block text-xs font-medium text-warm-muted mb-1">Title</label>
+					<input type="text" name="title" value={ node.Title } required
+						class="w-full px-3 py-2 bg-elevated border border-edge rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent text-sm text-warm"/>
+				</div>
+				<div>
+					<label class="block text-xs font-medium text-warm-muted mb-1">Body</label>
+					<textarea name="body" rows="16"
+						class="w-full px-3 py-2 bg-elevated border border-edge rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent text-sm text-warm font-mono resize-y">{ node.Body }</textarea>
+				</div>
+				<div class="flex items-center gap-3">
+					<button type="submit" class="px-4 py-2 bg-brand text-void rounded-lg hover:bg-brand-dark transition-colors text-sm font-medium">Save changes</button>
+					<a href={ templ.SafeURL(fmt.Sprintf("/app/%s/node/%s", space.Slug, node.ID)) }
+						class="px-4 py-2 text-sm text-warm-faint hover:text-warm transition-colors">Cancel</a>
+				</div>
+			</form>
+		</div>
+	}
+}
+
+// ── Questions view ───────────────────────────────────────────
+
+templ QuestionsView(space Space, spaces []Space, questions []Node, user ViewUser, isOwner bool, searchQuery string) {
+	@appLayout(space, spaces, "questions", user) {
+		<div class="max-w-3xl mx-auto p-6 space-y-6">
+			<div class="flex items-center justify-between">
+				<h1 class="font-display text-xl font-normal text-warm">Q&amp;A</h1>
+				if user.Name != "" && user.Name != "Anonymous" {
+					<button onclick="document.getElementById('new-question-form').classList.toggle('hidden')"
+						class="flex items-center gap-1.5 px-3 py-1.5 bg-brand text-void rounded-lg hover:bg-brand-dark transition-colors text-sm font-medium">
+						<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+						</svg>
+						Ask question
+					</button>
+				}
+			</div>
+			<form action={ templ.SafeURL("/app/" + space.Slug + "/questions") } method="GET" class="flex gap-2">
+				<input type="text" name="q" value={ searchQuery } placeholder="Search questions..."
+					class="flex-1 px-3 py-1.5 bg-elevated border border-edge rounded-lg text-xs text-warm placeholder-warm-faint focus:outline-none focus:ring-1 focus:ring-brand"/>
+				if searchQuery != "" {
+					<a href={ templ.SafeURL("/app/" + space.Slug + "/questions") } class="text-xs text-warm-faint hover:text-brand transition-colors flex items-center px-2">Clear</a>
+				}
+			</form>
+			if user.Name != "" && user.Name != "Anonymous" {
+				<div id="new-question-form" class="hidden">
+					<form method="POST" action={ templ.SafeURL("/app/" + space.Slug + "/op") }
+						class="bg-surface rounded-lg border border-edge p-4 space-y-3">
+						<input type="hidden" name="op" value="express"/>
+						<input type="hidden" name="kind" value="question"/>
+						<input type="text" name="title" placeholder="What's your question?" required
+							class="w-full text-sm px-3 py-2 bg-elevated border border-edge rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent text-warm placeholder-warm-faint"/>
+						<textarea name="body" placeholder="Add context or details (optional)" rows="3"
+							class="w-full text-sm px-3 py-2 bg-elevated border border-edge rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent resize-none text-warm placeholder-warm-faint"></textarea>
+						<div class="flex justify-end">
+							<button type="submit" class="px-4 py-1.5 bg-brand text-void rounded-lg hover:bg-brand-dark transition-colors text-sm font-medium">Ask question</button>
+						</div>
+					</form>
+				</div>
+			}
+			<div class="space-y-3">
+				for _, q := range questions {
+					<a href={ templ.SafeURL(fmt.Sprintf("/app/%s/questions/%s", space.Slug, q.ID)) }
+						class="block bg-surface rounded-lg border border-edge p-4 hover:border-brand/40 hover:shadow-lg hover:shadow-brand/5 hover:-translate-y-0.5 transition-all duration-200">
+						<div class="flex items-start gap-3">
+							<svg class="w-4 h-4 text-brand flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+							</svg>
+							<div class="flex-1 min-w-0">
+								<h3 class="font-medium text-warm">{ q.Title }</h3>
+								if q.Body != "" {
+									<p class="text-sm text-warm-muted line-clamp-2 mt-1">{ truncate(q.Body, 150) }</p>
+								}
+								<div class="flex items-center gap-3 text-xs text-warm-faint mt-2">
+									<span>{ q.Author }</span>
+									if q.ChildCount > 0 {
+										<span>{ fmt.Sprintf("%d answer", q.ChildCount) }{ pluralS(q.ChildCount) }</span>
+									}
+									<span class="ml-auto">{ q.CreatedAt.Format("Jan 2") }</span>
+								</div>
+							</div>
+						</div>
+					</a>
+				}
+				if len(questions) == 0 {
+					<div class="text-center py-12 space-y-3">
+						<svg class="w-12 h-12 mx-auto text-warm-faint/30" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+						<p class="text-warm-faint text-sm">No questions yet</p>
+						<p class="text-warm-faint/60 text-xs">Ask questions to build your team's shared knowledge.</p>
+					</div>
+				}
+			</div>
+		</div>
+	}
+}
+
+// ── Question detail view ───────────────────────────────────────────
+
+templ QuestionDetailView(space Space, spaces []Space, question Node, answers []Node, user ViewUser, isOwner bool) {
+	@appLayout(space, spaces, "questions", user) {
+		<div class="max-w-3xl mx-auto p-6 space-y-6">
+			<div class="flex items-center gap-2 text-sm text-warm-faint">
+				<a href={ templ.SafeURL("/app/" + space.Slug + "/questions") } class="hover:text-brand transition-colors">Q&amp;A</a>
+				<span>/</span>
+				<span class="text-warm-secondary truncate max-w-[300px]">{ question.Title }</span>
+			</div>
+			<div class="bg-surface rounded-lg border border-edge p-5 space-y-3">
+				<div class="flex items-start gap-3">
+					<svg class="w-5 h-5 text-brand flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+					</svg>
+					<h1 class="font-display text-xl font-normal text-warm leading-snug">{ question.Title }</h1>
+				</div>
+				if question.Body != "" {
+					<p class="text-sm text-warm-secondary ml-8 whitespace-pre-wrap">{ question.Body }</p>
+				}
+				<div class="flex items-center gap-3 text-xs text-warm-faint ml-8">
+					<span>Asked by { question.Author }</span>
+					<span>{ question.CreatedAt.Format("Jan 2, 2006") }</span>
+				</div>
+			</div>
+			<div class="space-y-4">
+				<h2 class="text-sm font-semibold text-warm-muted">Answers ({ fmt.Sprintf("%d", len(answers)) })</h2>
+				for _, a := range answers {
+					if a.AuthorKind == "agent" {
+						<div class="bg-violet-950/20 rounded-lg border border-violet-500/20 p-4 space-y-2">
+							<div class="flex items-center gap-2 mb-1">
+								<span class="inline-flex items-center gap-1 text-xs font-medium text-violet-400 bg-violet-500/10 border border-violet-500/20 rounded-full px-2 py-0.5">
+									<svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 8 8"><circle cx="4" cy="4" r="4"/></svg>
+									{ a.Author }
+								</span>
+								<span class="text-xs text-warm-faint">agent · { a.CreatedAt.Format("Jan 2, 2006") }</span>
+							</div>
+							<p class="text-sm text-warm-secondary whitespace-pre-wrap">{ a.Body }</p>
+						</div>
+					} else {
+						<div class="bg-surface rounded-lg border border-edge p-4 space-y-2">
+							<p class="text-sm text-warm-secondary whitespace-pre-wrap">{ a.Body }</p>
+							<div class="flex items-center gap-3 text-xs text-warm-faint">
+								<span>{ a.Author }</span>
+								<span>{ a.CreatedAt.Format("Jan 2, 2006") }</span>
+							</div>
+						</div>
+					}
+				}
+				if len(answers) == 0 {
+					<p class="text-sm text-warm-faint italic">No answers yet.</p>
+				}
+			</div>
+			if user.Name != "" && user.Name != "Anonymous" {
+				<div class="bg-surface rounded-lg border border-edge p-4 space-y-3">
+					<h3 class="text-sm font-medium text-warm-muted">Your answer</h3>
+					<form method="POST" action={ templ.SafeURL("/app/" + space.Slug + "/op") } class="space-y-3">
+						<input type="hidden" name="op" value="respond"/>
+						<input type="hidden" name="parent_id" value={ question.ID }/>
+						<textarea name="body" placeholder="Write your answer..." rows="4" required
+							class="w-full text-sm px-3 py-2 bg-elevated border border-edge rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent resize-none text-warm placeholder-warm-faint"></textarea>
+						<div class="flex justify-end">
+							<button type="submit" class="px-4 py-1.5 bg-brand text-void rounded-lg hover:bg-brand-dark transition-colors text-sm font-medium">Post answer</button>
+						</div>
+					</form>
+				</div>
+			}
 		</div>
 	}
 }
@@ -4085,6 +4357,10 @@ templ NodeDetailView(space Space, node Node, children []Node, ops []Op, user Vie
 								<input type="hidden" name="node_id" value={ node.ID }/>
 								<button type="submit" class="text-warm-faint hover:text-brand transition-colors">pin</button>
 							</form>
+						}
+						if node.Kind == KindDocument {
+							<a href={ templ.SafeURL(fmt.Sprintf("/app/%s/document/%s/edit", space.Slug, node.ID)) }
+								class="text-warm-faint hover:text-brand transition-colors">edit</a>
 						}
 					}
 				</div>
