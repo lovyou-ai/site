@@ -2792,7 +2792,7 @@ script addParticipant(name string) {
 	input.focus();
 }
 
-templ ConversationsView(space Space, spaces []Space, convos []ConversationSummary, user ViewUser, agents []string, nameMap map[string]string, searchQuery string, isDMFilter bool, isGroupFilter bool, msgResults []MessageSearchResult) {
+templ ConversationsView(space Space, spaces []Space, convos []ConversationSummary, user ViewUser, agents []string, nameMap map[string]string, personaMap map[string]*AgentPersona, searchQuery string, isDMFilter bool, isGroupFilter bool, msgResults []MessageSearchResult) {
 	@appLayout(space, spaces, "conversations", user) {
 		<div class="max-w-2xl mx-auto p-6 space-y-6">
 			<div class="flex items-center justify-between">
@@ -2852,6 +2852,12 @@ templ ConversationsView(space Space, spaces []Space, convos []ConversationSummar
 						<div class="flex items-center justify-between mb-1">
 							<h3 class={ "font-medium", templ.KV("text-warm", convo.UnreadCount > 0), templ.KV("text-warm-muted", convo.UnreadCount == 0) }>{ convo.Title }</h3>
 							<div class="flex items-center gap-2">
+								if p := personaMap[convo.ID]; p != nil {
+									<span class="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-violet-500/10 text-violet-400 border border-violet-500/20">
+										<span class="w-3 h-3 rounded-full bg-violet-500/20 flex items-center justify-center font-bold text-[8px]">{ initial(p.Display) }</span>
+										{ p.Display }
+									</span>
+								}
 								if convo.UnreadCount > 0 {
 									<span class="text-[10px] font-bold bg-brand text-void px-1.5 py-0.5 rounded-full">{ fmt.Sprintf("%d", convo.UnreadCount) }</span>
 								}

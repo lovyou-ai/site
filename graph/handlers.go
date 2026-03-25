@@ -983,6 +983,12 @@ func (h *Handlers) handleConversations(w http.ResponseWriter, r *http.Request) {
 	}
 	nameMap := h.store.ResolveUserNames(r.Context(), allIDs)
 
+	// Build persona map: convo ID → agent persona (nil if no agent in convo).
+	personaMap := make(map[string]*AgentPersona, len(convos))
+	for _, c := range convos {
+		personaMap[c.ID] = h.store.GetAgentPersonaForConversation(r.Context(), c.Tags)
+	}
+
 	// Message search: when a query is present, also search message bodies.
 	var msgResults []MessageSearchResult
 	if searchQuery != "" {
@@ -990,7 +996,7 @@ func (h *Handlers) handleConversations(w http.ResponseWriter, r *http.Request) {
 		msgResults, _ = h.store.SearchMessages(r.Context(), space.ID, bodyQ, fromAuthor, 20)
 	}
 
-	ConversationsView(*space, spaces, convos, h.viewUser(r), agents, nameMap, searchQuery, filterMode == "dm", filterMode == "group", msgResults).Render(r.Context(), w)
+	ConversationsView(*space, spaces, convos, h.viewUser(r), agents, nameMap, personaMap, searchQuery, filterMode == "dm", filterMode == "group", msgResults).Render(r.Context(), w)
 }
 
 func (h *Handlers) handlePeople(w http.ResponseWriter, r *http.Request) {
