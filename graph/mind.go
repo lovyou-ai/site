@@ -375,6 +375,11 @@ func (m *Mind) replyTo(ctx context.Context, spaceID, spaceSlug string, convo *No
 	// Extract and execute any task commands from the response.
 	cleanResponse, tasks := extractTaskCommands(response)
 
+	var replyTags []string
+	if len(docs) > 0 {
+		replyTags = []string{fmt.Sprintf("grounded:%d", len(docs))}
+	}
+
 	node, err := m.store.CreateNode(ctx, CreateNodeParams{
 		SpaceID:    spaceID,
 		ParentID:   convo.ID,
@@ -383,6 +388,7 @@ func (m *Mind) replyTo(ctx context.Context, spaceID, spaceSlug string, convo *No
 		Author:     agentName,
 		AuthorID:   agentID,
 		AuthorKind: "agent",
+		Tags:       replyTags,
 	})
 	if err != nil {
 		return fmt.Errorf("create node: %w", err)

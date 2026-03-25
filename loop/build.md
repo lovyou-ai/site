@@ -1,35 +1,23 @@
-# Build Report — Fix: aha_agent toast fires for all assignees
+# Build: Grounded-in indicator on agent chat messages
 
 ## Gap
-`aha_agent=1` was appended to the board redirect URL for any non-empty `assigneeID`, regardless of whether the assignee is a human or an agent. This caused the "Your AI colleague is on it" toast to appear when assigning tasks to human team members — factually incorrect.
+Agent replies that used document grounding had no visual indicator. Users couldn't tell whether an agent response was grounded in space documents or drawn purely from the model's training.
 
-## Change
+## Changes
 
-**File:** `graph/handlers.go` (intend op redirect, ~line 1792)
+### `graph/mind.go` — store doc count as tag on reply node
+In `replyTo`, when `len(docs) > 0`, a `grounded:N` tag is added to the `CreateNodeParams.Tags` for the reply node. When there are no docs (human-only spaces), no tag is added.
 
-**Before:**
-```go
-boardURL := "/app/" + space.Slug + "/board"
-if assigneeID != "" {
-    boardURL += "?aha_agent=1"
-}
-```
+### `graph/handlers.go` — `groundedLabel` helper
+New package-level function `groundedLabel(tags []string) string`:
+- Scans node tags for the `grounded:N` format
+- Returns `"grounded in 1 doc"` or `"grounded in N docs"` for N > 0
+- Returns `""` when no grounding tag is present
 
-**After:**
-```go
-boardURL := "/app/" + space.Slug + "/board"
-if assigneeID != "" {
-    if isAgent, _ := h.store.HasAgentParticipant(ctx, []string{assigneeID}); isAgent {
-        boardURL += "?aha_agent=1"
-    }
-}
-```
-
-Reuses existing `HasAgentParticipant` — no new methods added. The `OnTaskAssigned` Mind trigger already correctly handled non-agent assignees (it queries the DB for `kind = 'agent'` and returns early if not found), so no change was needed there.
-
-## Issue 2 (persona routing mismatch)
-The Critic flagged that the commit message "Implement agent persona routing in Mind" didn't match the diff. Reviewing `mind.go:buildSystemPrompt` (lines 404–470), persona routing IS implemented: role-tagged conversations load persona prompts from the DB via `GetAgentPersona`; non-role conversations fall back to `GetAgentPersonaForConversation`. The Critic was working without repo access, so the diff they saw was incomplete. No code change needed.
+### `graph/views.templ` — render label in chat templates
+Both `chatMessage` and `chatMessageCompact` now call `groundedLabel(msg.Tags)` after the message body. When non-empty, a `<div class="text-[9px] text-violet-400/50 mt-1">` label is rendered inside the bubble below the body text. Styled violet/low-opacity to match the agent aesthetic without competing with message content.
 
 ## Verification
+- `templ generate` — 15 updates, no errors
 - `go.exe build -buildvcs=false ./...` — clean
-- `go.exe test ./...` — all pass (graph: 0.537s)
+- `go.exe test ./...` — all pass (graph: 0.608s)

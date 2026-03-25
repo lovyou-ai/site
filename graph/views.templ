@@ -3567,6 +3567,9 @@ templ chatMessage(msg Node, currentUserID string, spaceSlug string, reactions []
 									@renderMarkdown(msg.Body)
 								</div>
 				}
+				if label := groundedLabel(msg.Tags); label != "" {
+					<div class="text-[9px] text-violet-400/50 mt-1">{ label }</div>
+				}
 			</div>
 			if len(reactions) > 0 {
 				<div id={ "rxn-" + msg.ID }>
@@ -3596,6 +3599,9 @@ templ chatMessageCompact(msg Node, currentUserID string, spaceSlug string, react
 				<div class="text-sm text-warm-secondary prose prose-invert prose-sm max-w-none">
 								@renderMarkdown(msg.Body)
 							</div>
+				if label := groundedLabel(msg.Tags); label != "" {
+					<div class="text-[9px] text-violet-400/50 mt-1">{ label }</div>
+				}
 			</div>
 			if len(reactions) > 0 {
 				<div id={ "rxn-" + msg.ID }>

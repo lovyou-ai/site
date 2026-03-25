@@ -3348,3 +3348,20 @@ func (h *Handlers) handleSetMindState(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"key": key, "status": "ok"})
 }
+
+// groundedLabel returns "grounded in N doc(s)" for agent messages that used document context,
+// or "" if no documents were used. Tags use the format "grounded:N".
+func groundedLabel(tags []string) string {
+	for _, t := range tags {
+		if strings.HasPrefix(t, "grounded:") {
+			n, err := strconv.Atoi(strings.TrimPrefix(t, "grounded:"))
+			if err == nil && n > 0 {
+				if n == 1 {
+					return "grounded in 1 doc"
+				}
+				return fmt.Sprintf("grounded in %d docs", n)
+			}
+		}
+	}
+	return ""
+}
