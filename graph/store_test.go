@@ -992,3 +992,75 @@ func TestBulkEndorsements(t *testing.T) {
 		t.Error("user-a should not have endorsed post2")
 	}
 }
+
+func TestGetAgentPersonasForConversations(t *testing.T) {
+	db, store := testDB(t)
+	ctx := context.Background()
+
+	// Seed a persona.
+	persona := AgentPersona{
+		Name:        "test-agent-persona",
+		Display:     "Test Agent",
+		Description: "for testing",
+		Category:    "product",
+		Prompt:      "# Test Agent\nA test persona.",
+		Model:       "sonnet",
+		Active:      true,
+	}
+	if err := store.UpsertAgentPersona(ctx, persona); err != nil {
+		t.Fatalf("upsert persona: %v", err)
+	}
+	t.Cleanup(func() {
+		db.ExecContext(ctx, `DELETE FROM agent_personas WHERE name = $1`, persona.Name)
+	})
+
+	// Insert an agent user referencing that persona.
+	agentID := newID()
+	_, err := db.ExecContext(ctx, `
+		INSERT INTO users (id, google_id, email, name, kind, persona_name)
+		VALUES ($1, $2, $3, $4, 'agent', $5)
+		ON CONFLICT (google_id) DO NOTHING`,
+		agentID, "agent:test-agent-persona", "test-agent-persona@agent.lovyou.ai", "test-agent-persona", persona.Name,
+	)
+	if err != nil {
+		t.Fatalf("insert agent user: %v", err)
+	}
+	t.Cleanup(func() { db.ExecContext(ctx, `DELETE FROM users WHERE id = $1`, agentID) })
+
+	humanID := newID()
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO users (id, google_id, email, name, kind)
+		VALUES ($1, $2, $3, $4, 'human')
+		ON CONFLICT (google_id) DO NOTHING`,
+		humanID, "human:test-"+humanID, "human@example.com", "human-user",
+	)
+	if err != nil {
+		t.Fatalf("insert human user: %v", err)
+	}
+	t.Cleanup(func() { db.ExecContext(ctx, `DELETE FROM users WHERE id = $1`, humanID) })
+
+	// Build two fake conversations: one with the agent, one without.
+	convoWithAgent := ConversationSummary{Node: Node{ID: newID(), Tags: []string{humanID, agentID}}}
+	convoHuman := ConversationSummary{Node: Node{ID: newID(), Tags: []string{humanID}}}
+	convos := []ConversationSummary{convoWithAgent, convoHuman}
+
+	result := store.GetAgentPersonasForConversations(ctx, convos)
+
+	if p := result[convoWithAgent.ID]; p == nil {
+		t.Error("expected persona for convo with agent, got nil")
+	} else if p.Name != persona.Name {
+		t.Errorf("persona name = %q, want %q", p.Name, persona.Name)
+	} else if p.Display != persona.Display {
+		t.Errorf("persona display = %q, want %q", p.Display, persona.Display)
+	}
+
+	if p := result[convoHuman.ID]; p != nil {
+		t.Errorf("expected nil persona for human-only convo, got %+v", p)
+	}
+
+	// Empty input must not panic.
+	empty := store.GetAgentPersonasForConversations(ctx, nil)
+	if len(empty) != 0 {
+		t.Errorf("empty input: expected 0 results, got %d", len(empty))
+	}
+}

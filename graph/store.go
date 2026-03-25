@@ -3039,6 +3039,62 @@ func (s *Store) GetAgentPersonaForConversation(ctx context.Context, tags []strin
 	return s.GetAgentPersona(ctx, personaName)
 }
 
+// GetAgentPersonasForConversations returns a map of conversation ID → AgentPersona
+// for all conversations that have an agent participant. Uses a single query to
+// avoid N+1 round-trips.
+func (s *Store) GetAgentPersonasForConversations(ctx context.Context, convos []ConversationSummary) map[string]*AgentPersona {
+	// Collect all unique user IDs across all conversations.
+	seen := make(map[string]bool)
+	for _, c := range convos {
+		for _, id := range c.Tags {
+			seen[id] = true
+		}
+	}
+	if len(seen) == 0 {
+		return map[string]*AgentPersona{}
+	}
+	allIDs := make([]string, 0, len(seen))
+	for id := range seen {
+		allIDs = append(allIDs, id)
+	}
+
+	// One query: find agent user IDs and their persona data.
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT u.id, ap.id, ap.name, ap.display, ap.description, ap.category, ap.prompt, ap.model, ap.active
+		FROM users u
+		JOIN agent_personas ap ON ap.name = u.persona_name
+		WHERE u.id = ANY($1) AND u.kind = 'agent' AND u.persona_name IS NOT NULL`,
+		pq.Array(allIDs),
+	)
+	if err != nil {
+		return map[string]*AgentPersona{}
+	}
+	defer rows.Close()
+
+	// userID → persona
+	byUserID := make(map[string]*AgentPersona)
+	for rows.Next() {
+		var userID string
+		var p AgentPersona
+		if err := rows.Scan(&userID, &p.ID, &p.Name, &p.Display, &p.Description, &p.Category, &p.Prompt, &p.Model, &p.Active); err != nil {
+			continue
+		}
+		byUserID[userID] = &p
+	}
+
+	// Map each conversation to the first agent persona found in its tags.
+	result := make(map[string]*AgentPersona, len(convos))
+	for _, c := range convos {
+		for _, id := range c.Tags {
+			if p, ok := byUserID[id]; ok {
+				result[c.ID] = p
+				break
+			}
+		}
+	}
+	return result
+}
+
 // GetAgentPersona returns a persona by slug name, or nil if not found.
 func (s *Store) GetAgentPersona(ctx context.Context, name string) *AgentPersona {
 	var p AgentPersona

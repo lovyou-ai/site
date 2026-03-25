@@ -984,10 +984,8 @@ func (h *Handlers) handleConversations(w http.ResponseWriter, r *http.Request) {
 	nameMap := h.store.ResolveUserNames(r.Context(), allIDs)
 
 	// Build persona map: convo ID → agent persona (nil if no agent in convo).
-	personaMap := make(map[string]*AgentPersona, len(convos))
-	for _, c := range convos {
-		personaMap[c.ID] = h.store.GetAgentPersonaForConversation(r.Context(), c.Tags)
-	}
+	// Uses a single batched query to avoid N+1 round-trips.
+	personaMap := h.store.GetAgentPersonasForConversations(r.Context(), convos)
 
 	// Message search: when a query is present, also search message bodies.
 	var msgResults []MessageSearchResult

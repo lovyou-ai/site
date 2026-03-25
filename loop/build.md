@@ -1,20 +1,26 @@
-# Build: Fix t.Skipf → t.Fatalf in TestBuildSystemPromptInjectsMemories
+# Build Report — Fix: Agent persona badge N+1 and empty-initial issues
 
 ## Gap
-`TestBuildSystemPromptInjectsMemories` used `t.Skipf` after a live DB connection was already established. A schema failure at that point is real breakage, not a missing environment — silently skipping gives false green in CI and violates invariant 12 (VERIFIED).
+Critic flagged three issues in `cedd52e`:
+1. N+1 query: `GetAgentPersonaForConversation` called once per conversation
+2. Blank badge circle when `AgentPersona.Display` is empty (`initial("")` → `""`)
+3. No test for the persona-lookup path
 
-## Change
+## Changes
 
-**`graph/memory_test.go:92`**
-```go
-// Before
-t.Skipf("agent_personas insert failed (schema may differ): %v", err)
+### `graph/store.go`
+- Added `GetAgentPersonasForConversations(ctx, convos)` — single SQL query joining `users` and `agent_personas` for all conversation tag IDs at once. Returns `map[string]*AgentPersona` (convo ID → persona). O(1) round-trips regardless of page size.
 
-// After
-t.Fatalf("agent_personas insert failed: %v", err)
-```
+### `graph/handlers.go`
+- Replaced the N+1 loop in `handleConversations` with a single call to `GetAgentPersonasForConversations`.
+
+### `graph/views.templ` + `graph/views_templ.go`
+- Fixed `initial()`: returns `"?"` instead of `""` for empty input. Prevents blank badge circle for unnamed or freshly-created agents.
+
+### `graph/store_test.go`
+- Added `TestGetAgentPersonasForConversations`: seeds a persona and agent user, constructs two fake ConversationSummary objects (one with agent, one without), verifies the mapping is correct and that empty input doesn't panic. Skips without `DATABASE_URL`.
 
 ## Verification
-
-- `go.exe build -buildvcs=false ./...` — passes clean
-- `go.exe test ./graph/... -run TestBuildSystemPromptInjectsMemories -v` — skips at `testDB(t)` when `DATABASE_URL` is absent (correct behavior; `testDB` owns the env check), does not skip at the schema insert
+- `templ generate`: 15 updates, no errors
+- `go build -buildvcs=false ./...`: clean
+- `go test ./...`: all pass (graph tests run in 0.507s)

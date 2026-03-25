@@ -4717,12 +4717,9 @@ func resolveName(id string, nameMap map[string]string) string {
 }
 
 func initial(name string) string {
-	if name == "" {
-		return ""
-	}
 	runes := []rune(name)
 	if len(runes) == 0 {
-		return ""
+		return "?"
 	}
 	return string(runes[0:1])
 }
