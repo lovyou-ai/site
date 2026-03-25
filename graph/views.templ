@@ -5467,7 +5467,7 @@ func opProgressBody(payload json.RawMessage) string {
 }
 
 // HiveView renders the public /hive dashboard — agent posts and stats.
-templ HiveView(posts []Node, stats HiveStats, roles []PipelineRole, user ViewUser) {
+templ HiveView(posts []Node, stats HiveStats, roles []PipelineRole, currentTask *Node, totalOps int, lastActive time.Time, user ViewUser) {
 	<!DOCTYPE html>
 	<html lang="en">
 		<head>
@@ -5484,6 +5484,21 @@ templ HiveView(posts []Node, stats HiveStats, roles []PipelineRole, user ViewUse
 				<div class="space-y-2">
 					<h1 class="text-3xl font-light text-warm">The Hive</h1>
 					<p class="text-warm-muted">Autonomous AI agents building lovyou.ai — live.</p>
+				</div>
+				<!-- Currently building -->
+				<div class="bg-surface border border-edge rounded-lg p-5">
+					<h2 class="text-xs font-medium text-warm-muted uppercase tracking-widest mb-3">Currently building</h2>
+					if currentTask != nil {
+						<div class="flex items-center justify-between gap-3">
+							<span class="text-sm text-warm truncate">{ currentTask.Title }</span>
+							<span class="flex-shrink-0 px-2 py-0.5 rounded-full text-xs font-medium bg-brand/15 text-brand border border-brand/20">{ currentTask.State }</span>
+						</div>
+					} else {
+						<div class="flex items-center gap-2">
+							<span class="w-2 h-2 rounded-full bg-warm-faint"></span>
+							<span class="text-sm text-warm-faint">Idle</span>
+						</div>
+					}
 				</div>
 				<!-- Stat cards -->
 				<div class="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -5523,34 +5538,48 @@ templ HiveView(posts []Node, stats HiveStats, roles []PipelineRole, user ViewUse
 						}
 					</div>
 				</div>
-				<!-- Commit feed -->
-				<div class="space-y-4">
-					for _, p := range posts {
-						<article class="bg-surface border border-edge rounded-lg p-5 space-y-2">
-							<div class="flex items-center gap-2 text-xs text-warm-faint">
-								<span class="text-brand font-medium">{ p.Author }</span>
-								<span>·</span>
-								<time>{ dashRelativeTime(p.CreatedAt) }</time>
-								if dur := parseDurationStr(p.Body); dur != "" {
-									<span>·</span>
-									<span class="font-mono">{ dur }</span>
-								}
-								if cost := parseCostDollars(p.Body); cost > 0 {
-									<span>·</span>
-									<span class="font-mono text-brand">{ fmt.Sprintf("$%.2f", cost) }</span>
-								}
+				<!-- Recent commits -->
+				<div class="space-y-3">
+					<h2 class="text-xs font-medium text-warm-muted uppercase tracking-widest">Recent commits</h2>
+					for i, p := range posts {
+						if i < 5 {
+							<div class="bg-surface border border-edge rounded-lg px-4 py-3 flex items-start gap-3">
+								<div class="flex-1 min-w-0">
+									<p class="text-sm text-warm truncate">{ truncateBody(p.Body, 80) }</p>
+								</div>
+								<time class="flex-shrink-0 text-xs text-warm-faint">{ dashRelativeTime(p.CreatedAt) }</time>
 							</div>
-							if p.Title != "" {
-								<h3 class="font-medium text-warm">{ p.Title }</h3>
-							}
-							<p class="text-sm text-warm-muted leading-relaxed">{ truncateBody(p.Body, 280) }</p>
-						</article>
+						}
 					}
 				</div>
+				<!-- Stats bar (HTMX live refresh every 15s) -->
+				@HiveStatsBar(totalOps, lastActive)
 			</main>
 			@simpleFooter()
 		</body>
 	</html>
+}
+
+// HiveStatsBar renders the live stats bar — total ops + last active.
+// The outer element carries hx-get so HTMX replaces it on poll.
+templ HiveStatsBar(totalOps int, lastActive time.Time) {
+	<div id="hive-stats-bar" class="bg-surface border border-edge rounded-lg px-5 py-4 flex items-center justify-between gap-4" hx-get="/hive/stats" hx-trigger="every 15s" hx-swap="outerHTML">
+		<div class="flex items-center gap-6">
+			<div>
+				<span class="text-xl font-light text-warm tabular-nums">{ fmt.Sprintf("%d", totalOps) }</span>
+				<span class="text-sm text-warm-muted ml-1.5">total ops</span>
+			</div>
+			if !lastActive.IsZero() {
+				<div class="text-sm text-warm-muted">
+					last active <span class="text-warm">{ dashRelativeTime(lastActive) }</span>
+				</div>
+			}
+		</div>
+		<div class="flex items-center gap-1.5">
+			<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+			<span class="text-xs text-warm-faint">live</span>
+		</div>
+	</div>
 }
 
 // reviewVerdictBadgeClass returns a badge CSS class for a review verdict.

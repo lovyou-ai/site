@@ -184,3 +184,72 @@ func TestGetHive_RendersMetrics(t *testing.T) {
 		}
 	}
 }
+
+// TestGetHive_RendersCurrentlyBuilding verifies the "Currently building" section
+// shows a task title when an open agent task exists, and "Idle" when none exists.
+func TestGetHive_RendersCurrentlyBuilding(t *testing.T) {
+	h, store, _ := testHandlers(t)
+
+	mux := http.NewServeMux()
+	h.Register(mux)
+
+	// Without any agent tasks, "Idle" should appear.
+	req := httptest.NewRequest("GET", "/hive", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "Idle") {
+		t.Error("expected 'Idle' when no agent tasks exist")
+	}
+
+	// Create a space and seed an open agent task.
+	space, err := store.CreateSpace(t.Context(), "hive-task-test", "Hive Task Test", "", "owner-hive-task", "project", "public")
+	if err != nil {
+		t.Fatalf("create space: %v", err)
+	}
+	t.Cleanup(func() { store.DeleteSpace(t.Context(), space.ID) })
+
+	_, err = store.CreateNode(t.Context(), CreateNodeParams{
+		SpaceID:    space.ID,
+		Kind:       KindTask,
+		Title:      "Build the knowledge layer",
+		Body:       "Layer 6 implementation.",
+		Author:     "hive-strategist",
+		AuthorID:   "hive-agent-task-test-id",
+		AuthorKind: "agent",
+	})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+
+	req2 := httptest.NewRequest("GET", "/hive", nil)
+	w2 := httptest.NewRecorder()
+	mux.ServeHTTP(w2, req2)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w2.Code, w2.Body.String())
+	}
+	if !strings.Contains(w2.Body.String(), "Build the knowledge layer") {
+		t.Error("expected task title in 'Currently building' section")
+	}
+}
+
+// TestGetHiveStats_Partial verifies GET /hive/stats returns 200 with stats bar HTML.
+func TestGetHiveStats_Partial(t *testing.T) {
+	h, _, _ := testHandlers(t)
+
+	mux := http.NewServeMux()
+	h.Register(mux)
+
+	req := httptest.NewRequest("GET", "/hive/stats", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /hive/stats: status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "total ops") {
+		t.Error("expected 'total ops' in /hive/stats response")
+	}
+}

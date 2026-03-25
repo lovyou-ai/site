@@ -2059,6 +2059,58 @@ func (s *Store) ListHiveActivity(ctx context.Context, authorID string, limit int
 	return nodes, rows.Err()
 }
 
+// GetHiveCurrentTask returns the most recent open task authored by an agent,
+// or nil if none exists. BOUNDED: at most 1 row.
+func (s *Store) GetHiveCurrentTask(ctx context.Context) (*Node, error) {
+	const q = `
+		SELECT n.id, n.space_id, COALESCE(n.parent_id, ''), n.kind, n.title, n.body,
+		       n.state, n.priority, n.assignee, n.assignee_id, n.author, n.author_id, n.author_kind,
+		       n.tags, n.pinned, n.due_date, n.created_at, n.updated_at, n.verdict, n.rating
+		FROM nodes n
+		WHERE n.kind = 'task' AND n.state = 'open' AND n.author_kind = 'agent'
+		ORDER BY n.created_at DESC LIMIT 1`
+	var n Node
+	var parentID sql.NullString
+	var dueDate sql.NullTime
+	err := s.db.QueryRowContext(ctx, q).Scan(
+		&n.ID, &n.SpaceID, &parentID, &n.Kind, &n.Title, &n.Body,
+		&n.State, &n.Priority, &n.Assignee, &n.AssigneeID, &n.Author, &n.AuthorID, &n.AuthorKind,
+		pq.Array(&n.Tags), &n.Pinned, &dueDate, &n.CreatedAt, &n.UpdatedAt, &n.Verdict, &n.Rating,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get hive current task: %w", err)
+	}
+	if parentID.Valid {
+		n.ParentID = parentID.String
+	}
+	if dueDate.Valid {
+		d := dueDate.Time
+		n.DueDate = &d
+	}
+	return &n, nil
+}
+
+// GetHiveTotals returns the count of all ops by agent actors and the most
+// recent op timestamp. Returns (0, zero, nil) if no agent ops exist. BOUNDED.
+func (s *Store) GetHiveTotals(ctx context.Context) (totalOps int, lastActive time.Time, err error) {
+	var t sql.NullTime
+	err = s.db.QueryRowContext(ctx, `
+		SELECT COUNT(o.id), MAX(o.created_at)
+		FROM ops o
+		JOIN users u ON u.id = o.actor_id
+		WHERE u.kind = 'agent'`).Scan(&totalOps, &t)
+	if err != nil {
+		return 0, time.Time{}, fmt.Errorf("get hive totals: %w", err)
+	}
+	if t.Valid {
+		lastActive = t.Time
+	}
+	return
+}
+
 // HasVoted checks if a user has already voted on a proposal.
 func (s *Store) HasVoted(ctx context.Context, nodeID, actorID string) bool {
 	var exists bool

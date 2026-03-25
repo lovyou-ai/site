@@ -121,6 +121,7 @@ func (h *Handlers) Register(mux *http.ServeMux) {
 
 	// Hive dashboard — public, no auth required.
 	mux.HandleFunc("GET /hive", h.handleHive)
+	mux.HandleFunc("GET /hive/stats", h.handleHiveStats)
 }
 
 // ────────────────────────────────────────────────────────────────────
@@ -3466,7 +3467,27 @@ func (h *Handlers) handleHive(w http.ResponseWriter, r *http.Request) {
 	}
 	stats := computeHiveStats(posts)
 	roles := computePipelineRoles(posts)
-	HiveView(posts, stats, roles, h.viewUser(r)).Render(r.Context(), w)
+	currentTask, err := h.store.GetHiveCurrentTask(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	totalOps, lastActive, err := h.store.GetHiveTotals(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	HiveView(posts, stats, roles, currentTask, totalOps, lastActive, h.viewUser(r)).Render(r.Context(), w)
+}
+
+// handleHiveStats renders the live stats bar partial for HTMX polling.
+func (h *Handlers) handleHiveStats(w http.ResponseWriter, r *http.Request) {
+	totalOps, lastActive, err := h.store.GetHiveTotals(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	HiveStatsBar(totalOps, lastActive).Render(r.Context(), w)
 }
 
 // groundedLabel returns "grounded in N doc(s)" for agent messages that used document context,
