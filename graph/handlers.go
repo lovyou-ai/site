@@ -98,6 +98,8 @@ func (h *Handlers) Register(mux *http.ServeMux) {
 	mux.Handle("POST /app/{slug}/document/{id}/edit", h.writeWrap(h.handleDocumentEdit))
 	mux.Handle("GET /app/{slug}/questions", h.readWrap(h.handleQuestions))
 	mux.Handle("GET /app/{slug}/questions/{id}", h.readWrap(h.handleQuestionDetail))
+	mux.Handle("GET /app/{slug}/council", h.readWrap(h.handleCouncil))
+	mux.Handle("GET /app/{slug}/council/{id}", h.readWrap(h.handleCouncilDetail))
 
 	// Conversation detail (optional auth).
 	mux.Handle("GET /app/{slug}/conversation/{id}", h.readWrap(h.handleConversationDetail))
@@ -1691,6 +1693,79 @@ func (h *Handlers) handleQuestionDetail(w http.ResponseWriter, r *http.Request) 
 	}
 
 	QuestionDetailView(*space, spaces, *question, answers, h.viewUser(r), isOwner).Render(r.Context(), w)
+}
+
+func (h *Handlers) handleCouncil(w http.ResponseWriter, r *http.Request) {
+	space, _, err := h.spaceForRead(r)
+	if errors.Is(err, ErrNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	spaces, _ := h.store.ListSpaces(r.Context(), h.userID(r))
+
+	sessions, err := h.store.ListCouncilSessions(r.Context(), space.ID, 50)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if wantsJSON(r) {
+		writeJSON(w, http.StatusOK, map[string]any{"space": space, "sessions": sessions})
+		return
+	}
+
+	CouncilListView(*space, spaces, sessions, h.viewUser(r)).Render(r.Context(), w)
+}
+
+func (h *Handlers) handleCouncilDetail(w http.ResponseWriter, r *http.Request) {
+	space, _, err := h.spaceForRead(r)
+	if errors.Is(err, ErrNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	spaces, _ := h.store.ListSpaces(r.Context(), h.userID(r))
+	id := r.PathValue("id")
+
+	session, err := h.store.GetNode(r.Context(), id)
+	if errors.Is(err, ErrNotFound) || (err == nil && session.Kind != KindCouncil) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if session.SpaceID != space.ID {
+		http.NotFound(w, r)
+		return
+	}
+
+	responses, err := h.store.ListNodes(r.Context(), ListNodesParams{
+		SpaceID:  space.ID,
+		ParentID: id,
+		Limit:    200,
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if wantsJSON(r) {
+		writeJSON(w, http.StatusOK, map[string]any{"space": space, "session": session, "responses": responses})
+		return
+	}
+
+	CouncilDetailView(*space, spaces, *session, responses, h.viewUser(r)).Render(r.Context(), w)
 }
 
 func (h *Handlers) handleGovernance(w http.ResponseWriter, r *http.Request) {

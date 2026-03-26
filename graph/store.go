@@ -54,6 +54,7 @@ const (
 	KindPolicy       = "policy"
 	KindDocument     = "document"
 	KindQuestion     = "question"
+	KindCouncil      = "council"
 )
 
 // Claim epistemic states.
@@ -1178,6 +1179,15 @@ func (s *Store) ListQuestions(ctx context.Context, spaceID string, limit int) ([
 	return s.ListNodes(ctx, ListNodesParams{
 		SpaceID: spaceID,
 		Kind:    KindQuestion,
+		Limit:   limit,
+	})
+}
+
+// ListCouncilSessions returns KindCouncil nodes in a space (BOUNDED: hard limit).
+func (s *Store) ListCouncilSessions(ctx context.Context, spaceID string, limit int) ([]Node, error) {
+	return s.ListNodes(ctx, ListNodesParams{
+		SpaceID: spaceID,
+		Kind:    KindCouncil,
 		Limit:   limit,
 	})
 }

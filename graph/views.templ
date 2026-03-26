@@ -122,6 +122,7 @@ templ appLayout(space Space, spaces []Space, activeLens string, user ViewUser) {
 					@mobileLensTab(space.Slug, "projects", "Projects", activeLens)
 					@mobileLensTab(space.Slug, "goals", "Goals", activeLens)
 					@mobileLensTab(space.Slug, "threads", "Threads", activeLens)
+					@mobileLensTab(space.Slug, "council", "Council", activeLens)
 					@mobileLensTab(space.Slug, "knowledge", "Knowledge", activeLens)
 					@mobileLensTab(space.Slug, "governance", "Governance", activeLens)
 					@mobileLensTab(space.Slug, "roles", "Roles", activeLens)
@@ -168,6 +169,7 @@ templ appLayout(space Space, spaces []Space, activeLens string, user ViewUser) {
 								@lensLink(space.Slug, "projects", "Projects", activeLens, projectsIcon())
 								@lensLink(space.Slug, "goals", "Goals", activeLens, goalsIcon())
 								@lensLink(space.Slug, "threads", "Threads", activeLens, threadsIcon())
+								@lensLink(space.Slug, "council", "Council", activeLens, councilIcon())
 								@lensLink(space.Slug, "knowledge", "Knowledge", activeLens, knowledgeIcon())
 								@lensLink(space.Slug, "governance", "Governance", activeLens, governanceIcon())
 								@lensLink(space.Slug, "roles", "Roles", activeLens, rolesIcon())
@@ -528,6 +530,12 @@ templ settingsIcon() {
 templ knowledgeIcon() {
 	<svg class="w-4 h-4 text-warm-faint" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 		<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+	</svg>
+}
+
+templ councilIcon() {
+	<svg class="w-4 h-4 text-warm-faint" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+		<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
 	</svg>
 }
 
@@ -2812,6 +2820,97 @@ templ QuestionDetailView(space Space, spaces []Space, question Node, answers []N
 					</form>
 				</div>
 			}
+		</div>
+	}
+}
+
+// ── Council lens ────────────────────────────────────────────────
+
+templ CouncilListView(space Space, spaces []Space, sessions []Node, user ViewUser) {
+	@appLayout(space, spaces, "council", user) {
+		<div class="max-w-3xl mx-auto p-6 space-y-6">
+			<div class="flex items-center justify-between">
+				<div>
+					<h1 class="font-display text-xl font-normal text-warm">Council</h1>
+					<p class="text-sm text-warm-muted mt-1">Multi-agent sessions — one question, many perspectives</p>
+				</div>
+			</div>
+			<div class="space-y-3">
+				for _, s := range sessions {
+					<a href={ templ.SafeURL(fmt.Sprintf("/app/%s/council/%s", space.Slug, s.ID)) }
+						class="block bg-surface rounded-lg border border-edge p-4 hover:border-brand/40 hover:shadow-lg hover:shadow-brand/5 hover:-translate-y-0.5 transition-all duration-200">
+						<div class="flex items-start gap-3">
+							<svg class="w-4 h-4 text-brand flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+							</svg>
+							<div class="flex-1 min-w-0">
+								<h3 class="font-medium text-warm">{ s.Title }</h3>
+								<div class="flex items-center gap-3 text-xs text-warm-faint mt-2">
+									<span>{ s.Author }</span>
+									if s.ChildCount > 0 {
+										<span>{ fmt.Sprintf("%d response", s.ChildCount) }{ pluralS(s.ChildCount) }</span>
+									}
+									<span class="ml-auto">{ s.CreatedAt.Format("Jan 2") }</span>
+								</div>
+							</div>
+						</div>
+					</a>
+				}
+				if len(sessions) == 0 {
+					<div class="text-center py-12 space-y-3">
+						<svg class="w-12 h-12 mx-auto text-warm-faint/30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+						</svg>
+						<p class="text-warm-faint text-sm">No council sessions yet</p>
+						<p class="text-warm-faint/60 text-xs">Convene a council to get multiple agent perspectives on a question.</p>
+					</div>
+				}
+			</div>
+		</div>
+	}
+}
+
+templ CouncilDetailView(space Space, spaces []Space, session Node, responses []Node, user ViewUser) {
+	@appLayout(space, spaces, "council", user) {
+		<div class="max-w-3xl mx-auto p-6 space-y-6">
+			<div class="flex items-center gap-2 text-sm text-warm-faint">
+				<a href={ templ.SafeURL("/app/" + space.Slug + "/council") } class="hover:text-brand transition-colors">Council</a>
+				<span>/</span>
+				<span class="text-warm-secondary truncate max-w-[300px]">{ session.Title }</span>
+			</div>
+			<div class="bg-surface rounded-lg border border-edge p-5 space-y-3">
+				<div class="flex items-start gap-3">
+					<svg class="w-5 h-5 text-brand flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+					</svg>
+					<h1 class="font-display text-xl font-normal text-warm leading-snug">{ session.Title }</h1>
+				</div>
+				if session.Body != "" {
+					<p class="text-sm text-warm-secondary ml-8 whitespace-pre-wrap">{ session.Body }</p>
+				}
+				<div class="flex items-center gap-3 text-xs text-warm-faint ml-8">
+					<span>Convened by { session.Author }</span>
+					<span>{ session.CreatedAt.Format("Jan 2, 2006") }</span>
+				</div>
+			</div>
+			<div class="space-y-4">
+				<h2 class="text-sm font-semibold text-warm-muted">Responses ({ fmt.Sprintf("%d", len(responses)) })</h2>
+				for _, r := range responses {
+					<div class="bg-violet-950/20 rounded-lg border border-violet-500/20 p-4 space-y-2">
+						<div class="flex items-center gap-2 mb-1">
+							<span class="inline-flex items-center gap-1 text-xs font-medium text-violet-400 bg-violet-500/10 border border-violet-500/20 rounded-full px-2 py-0.5">
+								<svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 8 8"><circle cx="4" cy="4" r="4"/></svg>
+								{ r.Author }
+							</span>
+							<span class="text-xs text-warm-faint">agent · { r.CreatedAt.Format("Jan 2, 2006") }</span>
+						</div>
+						<p class="text-sm text-warm-secondary whitespace-pre-wrap">{ r.Body }</p>
+					</div>
+				}
+				if len(responses) == 0 {
+					<p class="text-sm text-warm-faint italic">No responses yet. Agents are being convened…</p>
+				}
+			</div>
 		</div>
 	}
 }
@@ -5262,6 +5361,8 @@ func lensTooltip(lens string) string {
 		return "Team members, agents, and collaborators"
 	case "threads":
 		return "Topic discussions and ongoing conversations"
+	case "council":
+		return "Convene multiple agents on a single question"
 	case "knowledge":
 		return "Assert what you know, challenge what you doubt"
 	case "governance":
