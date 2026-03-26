@@ -1830,6 +1830,36 @@ func (s *Store) UseInviteCode(ctx context.Context, token, userID string) error {
 	return nil
 }
 
+// ListInvites returns all invite codes for a space, newest first.
+func (s *Store) ListInvites(ctx context.Context, spaceID string) ([]InviteCode, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT token, space_id, created_by, created_at, expires_at, max_uses, use_count
+		 FROM invites WHERE space_id = $1 ORDER BY created_at DESC`, spaceID)
+	if err != nil {
+		return nil, fmt.Errorf("list invites: %w", err)
+	}
+	defer rows.Close()
+	var codes []InviteCode
+	for rows.Next() {
+		var inv InviteCode
+		var expiresAt sql.NullTime
+		if err := rows.Scan(&inv.Token, &inv.SpaceID, &inv.CreatedBy, &inv.CreatedAt, &expiresAt, &inv.MaxUses, &inv.UseCount); err != nil {
+			return nil, fmt.Errorf("scan invite: %w", err)
+		}
+		if expiresAt.Valid {
+			inv.ExpiresAt = &expiresAt.Time
+		}
+		codes = append(codes, inv)
+	}
+	return codes, rows.Err()
+}
+
+// RevokeInvite deletes an invite code by token.
+func (s *Store) RevokeInvite(ctx context.Context, token string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM invites WHERE token = $1`, token)
+	return err
+}
+
 // ────────────────────────────────────────────────────────────────────
 // User work history
 // ────────────────────────────────────────────────────────────────────

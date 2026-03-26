@@ -1,32 +1,26 @@
-# Build Report — Tests for Knowledge surface
+# Build Report — Invite Management UI in Space Settings
 
 ## Gap
-Invariant VERIFIED: no code ships without tests. `ListDocuments`, `ListQuestions`, and `OnQuestionAsked` had no unit tests.
+Space settings had a minimal invite link section (show/generate one token) with no ability to see active invite codes, their usage, or revoke them.
 
 ## Files Changed
 
-### `graph/store_test.go`
-Added `TestListDocuments` and `TestListQuestions`:
-- Each seeds nodes of the correct kind plus one node of a different kind
-- Asserts the list returns only the correct kind
-- Asserts LIMIT enforcement (pass limit=2 with 3 nodes, expect ≤2 returned)
+### `graph/store.go`
+- Added `ListInvites(ctx, spaceID)` — queries all invite codes for a space, newest first; scans token, space_id, created_by, created_at, expires_at, max_uses, use_count
+- Added `RevokeInvite(ctx, token)` — deletes an invite code by token
 
-### `graph/handlers_test.go`
-Added `TestHandlerKnowledgeTabs`:
-- Creates a space, seeds a document and a question
-- Exercises all four tab values: `docs`, `qa`, `claims`, and empty (default)
-- Verifies HTTP 200 and no 500 for each tab — tests the HTML render path not covered by the existing JSON test
+### `graph/handlers.go`
+- Added route `POST /app/{slug}/invites` → `handleCreateInviteHTMX` — creates a new invite and returns an `InviteCodeRow` HTML fragment for HTMX inline insertion
+- Added route `DELETE /app/{slug}/invites/{token}` → `handleRevokeInvite` — verifies the token belongs to the space (owner-only), then deletes it
+- Updated `handleSpaceSettings` to call `ListInvites` and pass `[]InviteCode` to `SettingsView` (removed legacy `inviteToken` query-param path)
+- Fixed two error-path `SettingsView` calls in `handleUpdateSpace` and `handleDeleteSpace` to use `nil, nil` for members/invites
 
-### `graph/mind_test.go`
-Added `TestMindOnQuestionAsked_WithAgent`:
-- Seeds an agent user so `GetFirstAgent` returns it
-- Creates a question node
-- Stubs `callClaudeOverride` so no real Claude call is needed
-- Calls `OnQuestionAsked` synchronously
-- Asserts a `KindComment` child was created with the agent as author and a non-empty body
+### `graph/views.templ` (+ generated `views_templ.go`)
+- Added `InviteCodeRow(inv InviteCode, slug string)` component — displays invite URL (readonly, click-to-select), use_count/max_uses and expiry (when set), and a Revoke button using `hx-delete` + `hx-swap="delete"`
+- Updated `SettingsView` signature: replaced `inviteToken string` with `members []SpaceMember, invites []InviteCode`
+- Replaced "Invite people" section with "Invitations" section: header + "Generate invite link" button (HTMX POST to `/app/{slug}/invites`, target `#invites-list afterbegin`) + `#invites-list` div rendering existing codes via `InviteCodeRow`
 
 ## Verification
-```
-go.exe build -buildvcs=false ./...   → success (no errors)
-```
-Tests require `DATABASE_URL` (integration DB) and will skip without it — consistent with the rest of the test suite.
+- `templ generate` — ✓ 16 updates, no errors
+- `go.exe build -buildvcs=false ./...` — ✓ clean
+- `go.exe test ./...` — ✓ all pass (graph: 0.604s)

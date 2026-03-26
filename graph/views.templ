@@ -3991,7 +3991,36 @@ templ opItem(o Op, spaceSlug string) {
 
 // ── Settings ────────────────────────────────────────────────────
 
-templ SettingsView(space Space, spaces []Space, reports []Report, user ViewUser, errMsg string, inviteToken string, members []SpaceMember) {
+templ InviteCodeRow(inv InviteCode, slug string) {
+	<div id={ "invite-" + inv.Token } class="flex items-center gap-2 py-2.5 border-b border-edge last:border-0">
+		<input
+			type="text"
+			value={ "https://lovyou.ai/join/" + inv.Token }
+			readonly
+			onclick="this.select()"
+			class="flex-1 min-w-0 px-2 py-1.5 bg-elevated border border-edge rounded text-xs text-warm font-mono focus:outline-none focus:ring-1 focus:ring-brand"
+		/>
+		<div class="flex items-center gap-3 shrink-0 text-[11px] text-warm-faint whitespace-nowrap">
+			if inv.MaxUses > 0 {
+				<span>{ fmt.Sprintf("%d/%d uses", inv.UseCount, inv.MaxUses) }</span>
+			} else if inv.UseCount > 0 {
+				<span>{ fmt.Sprintf("%d uses", inv.UseCount) }</span>
+			}
+			if inv.ExpiresAt != nil {
+				<span>expires { dashRelativeTime(*inv.ExpiresAt) }</span>
+			}
+		</div>
+		<button
+			hx-delete={ "/app/" + slug + "/invites/" + inv.Token }
+			hx-target={ "#invite-" + inv.Token }
+			hx-swap="delete"
+			hx-confirm="Revoke this invite link?"
+			class="shrink-0 text-[11px] text-warm-faint hover:text-red-400 transition-colors px-2 py-1"
+		>Revoke</button>
+	</div>
+}
+
+templ SettingsView(space Space, spaces []Space, reports []Report, user ViewUser, errMsg string, members []SpaceMember, invites []InviteCode) {
 	@appLayout(space, spaces, "settings", user) {
 		<div class="max-w-xl mx-auto p-6 space-y-8">
 			<h1 class="font-display text-xl font-normal text-warm">Settings</h1>
@@ -4040,27 +4069,27 @@ templ SettingsView(space Space, spaces []Space, reports []Report, user ViewUser,
 					Save changes
 				</button>
 			</form>
-			<!-- Invite link -->
-			<div class="bg-surface border border-edge rounded-lg p-5 space-y-3">
-				<h2 class="text-sm font-medium text-warm">Invite people</h2>
-				<p class="text-xs text-warm-muted">Share this link to invite someone to your space.</p>
-				if inviteToken != "" {
-					<div class="flex gap-2 items-center">
-						<input
-							type="text"
-							value={ "https://lovyou.ai/join/" + inviteToken }
-							readonly
-							class="flex-1 px-3 py-2 bg-elevated border border-edge rounded-lg text-xs text-warm font-mono select-all focus:outline-none focus:ring-1 focus:ring-brand"
-							onclick="this.select()"
-						/>
+			<!-- Invitations -->
+			<div class="bg-surface border border-edge rounded-lg p-5 space-y-4">
+				<div class="flex items-center justify-between gap-4">
+					<div>
+						<h2 class="text-sm font-medium text-warm">Invitations</h2>
+						<p class="text-xs text-warm-muted mt-0.5">Share invite links to add people to your space.</p>
 					</div>
-				} else {
-					<form method="POST" action={ templ.SafeURL("/app/" + space.Slug + "/invite") }>
-						<button type="submit" class="px-4 py-2 bg-brand/10 text-brand rounded-lg hover:bg-brand/20 transition-colors text-sm font-medium">
-							Generate invite link
-						</button>
-					</form>
-				}
+					<button
+						hx-post={ "/app/" + space.Slug + "/invites" }
+						hx-target="#invites-list"
+						hx-swap="afterbegin"
+						class="shrink-0 px-3 py-1.5 bg-brand/10 text-brand rounded-lg hover:bg-brand/20 transition-colors text-xs font-medium"
+					>
+						Generate invite link
+					</button>
+				</div>
+				<div id="invites-list">
+					for _, inv := range invites {
+						@InviteCodeRow(inv, space.Slug)
+					}
+				</div>
 			</div>
 			<!-- Reports -->
 			if len(reports) > 0 {
