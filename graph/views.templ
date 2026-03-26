@@ -5274,56 +5274,192 @@ func lensTooltip(lens string) string {
 
 // ── Knowledge lens (Layer 6) ────────────────────────────────────
 
-templ KnowledgeView(space Space, spaces []Space, claims []Node, challengeCounts map[string]int, user ViewUser, searchQuery string) {
+templ KnowledgeView(space Space, spaces []Space, claims []Node, challengeCounts map[string]int, user ViewUser, searchQuery string, tab string, docs []Node, questions []Node) {
 	@appLayout(space, spaces, "knowledge", user) {
 		<div class="p-6 md:p-8 space-y-6">
-			<div class="flex items-center justify-between">
-				<div>
-					<h1 class="font-display text-2xl font-light text-warm">Knowledge</h1>
-					<p class="text-sm text-warm-muted mt-1">Claims with epistemic status — assert what you know, challenge what you doubt</p>
-				</div>
+			<div>
+				<h1 class="font-display text-2xl font-light text-warm">Knowledge</h1>
+				<p class="text-sm text-warm-muted mt-1">Documents, Q&amp;A, and claims for this space</p>
 			</div>
-			<form action={ templ.SafeURL("/app/" + space.Slug + "/knowledge") } method="GET" class="flex gap-2">
-				<input type="text" name="q" value={ searchQuery } placeholder="Search claims..."
-					class="flex-1 px-3 py-1.5 bg-elevated border border-edge rounded-lg text-xs text-warm placeholder-warm-faint focus:outline-none focus:ring-1 focus:ring-brand"/>
-				if searchQuery != "" {
-					<a href={ templ.SafeURL("/app/" + space.Slug + "/knowledge") } class="text-xs text-warm-faint hover:text-brand transition-colors flex items-center px-2">Clear</a>
-				}
-			</form>
-			<!-- Create claim form -->
-			<form method="POST" action={ templ.SafeURL("/app/" + space.Slug + "/op") } class="bg-surface border border-edge rounded-lg p-5 space-y-3">
-				<input type="hidden" name="op" value="assert"/>
-				<input
-					type="text"
-					name="title"
-					placeholder="State a claim..."
-					required
-					class="w-full px-3 py-2 bg-elevated border border-edge rounded-lg text-sm text-warm placeholder-warm-faint focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent"
-				/>
-				<textarea
-					name="body"
-					placeholder="Evidence or reasoning (optional)"
-					rows="2"
-					class="w-full px-3 py-2 bg-elevated border border-edge rounded-lg text-sm text-warm placeholder-warm-faint focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent resize-none"
-				></textarea>
-				<button type="submit" class="px-4 py-2 bg-brand text-void rounded-lg hover:bg-brand-dark transition-colors text-sm font-medium">
-					Assert claim
-				</button>
-			</form>
-			if len(claims) == 0 {
-				<div class="text-center py-12">
-					<p class="text-warm-muted text-lg">No claims yet</p>
-					<p class="text-warm-faint text-sm mt-2">Be the first to assert a knowledge claim in this space</p>
-				</div>
+			<!-- Tab nav -->
+			<div class="flex gap-1 border-b border-edge">
+				<a href={ templ.SafeURL("/app/" + space.Slug + "/knowledge?tab=docs") }
+					class={ "px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors", templ.KV("border-brand text-brand", tab == "docs"), templ.KV("border-transparent text-warm-muted hover:text-warm", tab != "docs") }>
+					Docs
+				</a>
+				<a href={ templ.SafeURL("/app/" + space.Slug + "/knowledge?tab=qa") }
+					class={ "px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors", templ.KV("border-brand text-brand", tab == "qa"), templ.KV("border-transparent text-warm-muted hover:text-warm", tab != "qa") }>
+					Q&amp;A
+				</a>
+				<a href={ templ.SafeURL("/app/" + space.Slug + "/knowledge?tab=claims") }
+					class={ "px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors", templ.KV("border-brand text-brand", tab == "claims"), templ.KV("border-transparent text-warm-muted hover:text-warm", tab != "claims") }>
+					Claims
+				</a>
+			</div>
+			if tab == "docs" {
+				@DocumentList(space.Slug, docs, user)
+			} else if tab == "qa" {
+				@knowledgeQATab(space, questions, user, searchQuery)
 			} else {
-				<div class="space-y-3">
-					for _, c := range claims {
-						@KnowledgeCard(c, space.Slug, challengeCounts[c.ID])
-					}
-				</div>
+				@knowledgeClaimsTab(space, claims, challengeCounts, user, searchQuery)
 			}
 		</div>
 	}
+}
+
+templ DocumentList(spaceSlug string, docs []Node, user ViewUser) {
+	<div class="space-y-4">
+		if user.Name != "" && user.Name != "Anonymous" {
+			@CreateDocument(spaceSlug)
+		}
+		if len(docs) == 0 {
+			<div class="text-center py-12 space-y-2">
+				<p class="text-warm-muted">No documents yet</p>
+				<p class="text-warm-faint text-xs">Create the first document to share knowledge with the space</p>
+			</div>
+		} else {
+			<div class="space-y-3">
+				for _, d := range docs {
+					<a href={ templ.SafeURL(fmt.Sprintf("/app/%s/document/%s", spaceSlug, d.ID)) }
+						class="flex items-start gap-4 p-4 bg-surface rounded-lg border border-edge hover:border-brand/40 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-brand/5 transition-all duration-200">
+						<svg class="w-4 h-4 text-warm-muted flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+						</svg>
+						<div class="flex-1 min-w-0">
+							<div class="flex items-center gap-2 flex-wrap">
+								<span class="font-medium text-sm text-warm">{ d.Title }</span>
+								@docStatusBadge(d.State)
+							</div>
+							<div class="flex items-center gap-3 mt-1 text-xs text-warm-faint">
+								<span>{ d.Author }</span>
+								<span>{ d.CreatedAt.Format("Jan 2, 2006") }</span>
+							</div>
+						</div>
+					</a>
+				}
+			</div>
+		}
+	</div>
+}
+
+templ CreateDocument(spaceSlug string) {
+	<form method="POST" action={ templ.SafeURL("/app/" + spaceSlug + "/op") }
+		class="bg-surface border border-edge rounded-lg p-4 space-y-3">
+		<input type="hidden" name="op" value="intend"/>
+		<input type="hidden" name="kind" value="document"/>
+		<input type="text" name="title" placeholder="Document title..." required
+			class="w-full px-3 py-2 bg-elevated border border-edge rounded-lg text-sm text-warm placeholder-warm-faint focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent"/>
+		<div class="flex justify-end">
+			<button type="submit" class="px-4 py-1.5 bg-brand text-void rounded-lg hover:bg-brand-dark transition-colors text-sm font-medium">
+				Create document
+			</button>
+		</div>
+	</form>
+}
+
+templ docStatusBadge(state string) {
+	switch state {
+		case StateDone:
+			<span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400">published</span>
+		case StateClosed:
+			<span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-warm-faint/20 text-warm-muted">archived</span>
+		default:
+			<span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-400">draft</span>
+	}
+}
+
+templ knowledgeQATab(space Space, questions []Node, user ViewUser, searchQuery string) {
+	<div class="space-y-4">
+		if user.Name != "" && user.Name != "Anonymous" {
+			<form method="POST" action={ templ.SafeURL("/app/" + space.Slug + "/op") }
+				class="bg-surface border border-edge rounded-lg p-4 space-y-3">
+				<input type="hidden" name="op" value="intend"/>
+				<input type="hidden" name="kind" value="question"/>
+				<input type="text" name="title" placeholder="Ask a question..." required
+					class="w-full text-sm px-3 py-2 bg-elevated border border-edge rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent text-warm placeholder-warm-faint"/>
+				<textarea name="description" placeholder="Add context (optional)" rows="2"
+					class="w-full text-sm px-3 py-2 bg-elevated border border-edge rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent resize-none text-warm placeholder-warm-faint"></textarea>
+				<div class="flex justify-end">
+					<button type="submit" class="px-4 py-1.5 bg-brand text-void rounded-lg hover:bg-brand-dark transition-colors text-sm font-medium">Ask question</button>
+				</div>
+			</form>
+		}
+		<div class="space-y-3">
+			for _, q := range questions {
+				<a href={ templ.SafeURL(fmt.Sprintf("/app/%s/questions/%s", space.Slug, q.ID)) }
+					class="block bg-surface rounded-lg border border-edge p-4 hover:border-brand/40 hover:shadow-lg hover:shadow-brand/5 hover:-translate-y-0.5 transition-all duration-200">
+					<div class="flex items-start gap-3">
+						<svg class="w-4 h-4 text-brand flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+						</svg>
+						<div class="flex-1 min-w-0">
+							<h3 class="font-medium text-sm text-warm">{ q.Title }</h3>
+							if q.Body != "" {
+								<p class="text-xs text-warm-muted line-clamp-2 mt-1">{ truncate(q.Body, 150) }</p>
+							}
+							<div class="flex items-center gap-3 text-xs text-warm-faint mt-2">
+								<span>{ q.Author }</span>
+								if q.ChildCount > 0 {
+									<span>{ fmt.Sprintf("%d answer", q.ChildCount) }{ pluralS(q.ChildCount) }</span>
+								}
+								<span class="ml-auto">{ q.CreatedAt.Format("Jan 2") }</span>
+							</div>
+						</div>
+					</div>
+				</a>
+			}
+			if len(questions) == 0 {
+				<div class="text-center py-12 space-y-2">
+					<p class="text-warm-muted text-sm">No questions yet</p>
+					<p class="text-warm-faint/60 text-xs">Ask questions to build your team's shared knowledge</p>
+				</div>
+			}
+		</div>
+	</div>
+}
+
+templ knowledgeClaimsTab(space Space, claims []Node, challengeCounts map[string]int, user ViewUser, searchQuery string) {
+	<div class="space-y-4">
+		<form action={ templ.SafeURL("/app/" + space.Slug + "/knowledge") } method="GET" class="flex gap-2">
+			<input type="hidden" name="tab" value="claims"/>
+			<input type="text" name="q" value={ searchQuery } placeholder="Search claims..."
+				class="flex-1 px-3 py-1.5 bg-elevated border border-edge rounded-lg text-xs text-warm placeholder-warm-faint focus:outline-none focus:ring-1 focus:ring-brand"/>
+			if searchQuery != "" {
+				<a href={ templ.SafeURL("/app/" + space.Slug + "/knowledge?tab=claims") } class="text-xs text-warm-faint hover:text-brand transition-colors flex items-center px-2">Clear</a>
+			}
+		</form>
+		<form method="POST" action={ templ.SafeURL("/app/" + space.Slug + "/op") } class="bg-surface border border-edge rounded-lg p-5 space-y-3">
+			<input type="hidden" name="op" value="assert"/>
+			<input
+				type="text"
+				name="title"
+				placeholder="State a claim..."
+				required
+				class="w-full px-3 py-2 bg-elevated border border-edge rounded-lg text-sm text-warm placeholder-warm-faint focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent"
+			/>
+			<textarea
+				name="body"
+				placeholder="Evidence or reasoning (optional)"
+				rows="2"
+				class="w-full px-3 py-2 bg-elevated border border-edge rounded-lg text-sm text-warm placeholder-warm-faint focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent resize-none"
+			></textarea>
+			<button type="submit" class="px-4 py-2 bg-brand text-void rounded-lg hover:bg-brand-dark transition-colors text-sm font-medium">
+				Assert claim
+			</button>
+		</form>
+		if len(claims) == 0 {
+			<div class="text-center py-12">
+				<p class="text-warm-muted text-lg">No claims yet</p>
+				<p class="text-warm-faint text-sm mt-2">Be the first to assert a knowledge claim in this space</p>
+			</div>
+		} else {
+			<div class="space-y-3">
+				for _, c := range claims {
+					@KnowledgeCard(c, space.Slug, challengeCounts[c.ID])
+				}
+			</div>
+		}
+	</div>
 }
 
 templ KnowledgeCard(node Node, spaceSlug string, challenges int) {

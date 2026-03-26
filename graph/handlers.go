@@ -1216,7 +1216,12 @@ func (h *Handlers) handleKnowledge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	KnowledgeView(*space, spaces, claims, challengeCounts, h.viewUser(r), searchQuery).Render(r.Context(), w)
+	tab := r.URL.Query().Get("tab")
+	if tab != "docs" && tab != "qa" && tab != "claims" {
+		tab = "docs"
+	}
+
+	KnowledgeView(*space, spaces, claims, challengeCounts, h.viewUser(r), searchQuery, tab, docs, questions).Render(r.Context(), w)
 }
 
 func (h *Handlers) handleChangelog(w http.ResponseWriter, r *http.Request) {
