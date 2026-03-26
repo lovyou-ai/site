@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/yuin/goldmark"
@@ -5277,7 +5278,7 @@ func lensTooltip(lens string) string {
 func knowledgeTabURL(slug, tab, q string) string {
 	u := "/app/" + slug + "/knowledge?tab=" + tab
 	if q != "" {
-		u += "&q=" + q
+		u += "&q=" + url.QueryEscape(q)
 	}
 	return u
 }
