@@ -853,6 +853,9 @@ func TestMindOnQuestionAsked_WithAgent(t *testing.T) {
 	}
 	t.Cleanup(func() { db.ExecContext(ctx, `DELETE FROM users WHERE id = $1`, agentID) })
 
+	if old, _ := store.GetSpaceBySlug(ctx, "question-asked-with-agent-test"); old != nil {
+		store.DeleteSpace(ctx, old.ID)
+	}
 	space, err := store.CreateSpace(ctx, "question-asked-with-agent-test", "QA With Agent Test", "", "owner", "project", "public")
 	if err != nil {
 		t.Fatalf("create space: %v", err)
@@ -891,11 +894,29 @@ func TestMindOnQuestionAsked_WithAgent(t *testing.T) {
 	if answer.Kind != KindComment {
 		t.Errorf("answer kind = %q, want %q", answer.Kind, KindComment)
 	}
-	if answer.AuthorID != agentID {
-		t.Errorf("answer authorID = %q, want %q", answer.AuthorID, agentID)
+	// OnQuestionAsked calls GetFirstAgent which returns the alphabetically-first agent.
+	// Assert that the answer was by an agent user (not a specific ID, which depends on DB state).
+	if answer.AuthorKind != "agent" {
+		t.Errorf("answer author kind = %q, want %q", answer.AuthorKind, "agent")
 	}
 	if answer.Body == "" {
 		t.Error("answer body is empty")
+	}
+
+	// Verify a respond op was recorded on the answer node.
+	ops, err := store.ListOps(ctx, space.ID, 20)
+	if err != nil {
+		t.Fatalf("list ops: %v", err)
+	}
+	var hasRespondOp bool
+	for _, o := range ops {
+		if o.NodeID == answer.ID && o.Op == "respond" {
+			hasRespondOp = true
+			break
+		}
+	}
+	if !hasRespondOp {
+		t.Errorf("expected a respond op on answer node %s, got none", answer.ID)
 	}
 }
 
@@ -905,6 +926,9 @@ func TestMindOnQuestionAsked_NoAgent(t *testing.T) {
 	ctx := t.Context()
 	mind := NewMind(db, store, "fake-token")
 
+	if old, _ := store.GetSpaceBySlug(ctx, "question-no-agent-test"); old != nil {
+		store.DeleteSpace(ctx, old.ID)
+	}
 	space, err := store.CreateSpace(ctx, "question-no-agent-test", "QA No Agent", "", "owner", "project", "public")
 	if err != nil {
 		t.Fatalf("create space: %v", err)

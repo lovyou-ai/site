@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -1214,4 +1215,89 @@ func TestHandlerCouncilDetail_NotFound(t *testing.T) {
 			t.Errorf("status = %d, want %d (wrong kind should 404)", w.Code, http.StatusNotFound)
 		}
 	})
+}
+
+// TestHandlerQuestionAutoAnswer verifies that creating a KindQuestion via the intend op
+// triggers Mind.OnQuestionAsked and results in a respond op on the answer node.
+func TestHandlerQuestionAutoAnswer(t *testing.T) {
+	db, store := testDB(t)
+	ctx := t.Context()
+
+	agentID := "qa-auto-answer-agent-id"
+	agentName := "QAAutoAnswerAgent"
+	db.ExecContext(ctx, `DELETE FROM users WHERE id = $1`, agentID)
+	_, err := db.ExecContext(ctx,
+		`INSERT INTO users (id, google_id, email, name, kind) VALUES ($1, $2, $3, $4, 'agent')`,
+		agentID, "agent:"+agentName, agentName+"@test.lovyou.ai", agentName)
+	if err != nil {
+		t.Fatalf("create agent: %v", err)
+	}
+	t.Cleanup(func() { db.ExecContext(ctx, `DELETE FROM users WHERE id = $1`, agentID) })
+
+	mind := NewMind(db, store, "fake-token")
+	mind.callClaudeOverride = func(_ context.Context, _ string, _ []claudeMessage) (string, error) {
+		return "Auto-answer from mind.", nil
+	}
+
+	testUser := &auth.User{ID: "qa-auto-human-1", Name: "QATester", Email: "qa@test.com", Kind: "human"}
+	wrap := func(next http.HandlerFunc) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r = r.WithContext(auth.ContextWithUser(r.Context(), testUser))
+			next.ServeHTTP(w, r)
+		})
+	}
+	h := NewHandlers(store, wrap, wrap)
+	h.SetMind(mind)
+	mux := http.NewServeMux()
+	h.Register(mux)
+
+	if old, _ := store.GetSpaceBySlug(ctx, "qa-auto-answer-test"); old != nil {
+		store.DeleteSpace(ctx, old.ID)
+	}
+	space, err := store.CreateSpace(ctx, "qa-auto-answer-test", "QA Auto Answer Test", "", testUser.ID, "project", "public")
+	if err != nil {
+		t.Fatalf("create space: %v", err)
+	}
+	t.Cleanup(func() { store.DeleteSpace(ctx, space.ID) })
+
+	body := `{"op":"intend","title":"What is the event graph?","description":"Looking for a quick overview","kind":"question"}`
+	req := httptest.NewRequest("POST", "/app/qa-auto-answer-test/op", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusCreated, w.Body.String())
+	}
+
+	var result map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	node := result["node"].(map[string]any)
+	questionID := node["id"].(string)
+
+	// OnQuestionAsked runs in a goroutine; poll briefly for the respond op.
+	deadline := time.Now().Add(2 * time.Second)
+	var hasRespondOp bool
+	for time.Now().Before(deadline) {
+		ops, err := store.ListOps(ctx, space.ID, 50)
+		if err != nil {
+			t.Fatalf("list ops: %v", err)
+		}
+		for _, o := range ops {
+			if o.Op == "respond" && o.NodeID != questionID {
+				hasRespondOp = true
+				break
+			}
+		}
+		if hasRespondOp {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !hasRespondOp {
+		t.Errorf("expected a respond op on the answer node after creating KindQuestion %s, got none", questionID)
+	}
 }
