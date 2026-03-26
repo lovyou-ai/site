@@ -204,18 +204,22 @@ func (h *Handlers) spaceOwnerOnly(r *http.Request) (*Space, error) {
 	return space, nil
 }
 
-// spaceForRead returns a space if the user owns it OR it's public (for reads).
+// spaceForRead returns a space if the user owns it, it's public, or the user is a member (for reads).
 func (h *Handlers) spaceForRead(r *http.Request) (*Space, bool, error) {
 	slug := r.PathValue("slug")
 	space, err := h.store.GetSpaceBySlug(r.Context(), slug)
 	if err != nil {
 		return nil, false, err
 	}
-	isOwner := space.OwnerID == h.userID(r)
-	if !isOwner && space.Visibility != VisibilityPublic {
-		return nil, false, ErrNotFound
+	uid := h.userID(r)
+	isOwner := space.OwnerID == uid
+	if isOwner || space.Visibility == VisibilityPublic {
+		return space, isOwner, nil
 	}
-	return space, isOwner, nil
+	if uid != "anonymous" && h.store.IsMember(r.Context(), space.ID, uid) {
+		return space, false, nil
+	}
+	return nil, false, ErrNotFound
 }
 
 func isHTMX(r *http.Request) bool {

@@ -740,3 +740,84 @@ func TestHandlerKnowledgeTabs(t *testing.T) {
 		})
 	}
 }
+
+func TestHandlerJoinViaInvite(t *testing.T) {
+	_, store := testDB(t)
+
+	testUser := &auth.User{ID: "joiner-1", Name: "Joiner", Email: "joiner@test.com", Kind: "human"}
+	authWrap := func(next http.HandlerFunc) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := auth.ContextWithUser(r.Context(), testUser)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+	// Simulates the real RequireAuth middleware: redirects unauthenticated users to /auth/login.
+	noAuthWrap := func(next http.HandlerFunc) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, "/auth/login", http.StatusSeeOther)
+		})
+	}
+
+	space, err := store.CreateSpace(t.Context(), "join-test-space", "Join Test", "", "owner-1", "project", "private")
+	if err != nil {
+		t.Fatalf("create space: %v", err)
+	}
+	t.Cleanup(func() { store.DeleteSpace(t.Context(), space.ID) })
+
+	token, err := store.CreateInviteCode(t.Context(), space.ID, "owner-1", nil, 0)
+	if err != nil {
+		t.Fatalf("create invite code: %v", err)
+	}
+
+	t.Run("unauthenticated_redirect", func(t *testing.T) {
+		h := NewHandlers(store, noAuthWrap, noAuthWrap)
+		mux := http.NewServeMux()
+		h.Register(mux)
+
+		req := httptest.NewRequest("GET", "/join/"+token, nil)
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+
+		if w.Code != http.StatusSeeOther {
+			t.Errorf("status = %d, want %d", w.Code, http.StatusSeeOther)
+		}
+		if loc := w.Header().Get("Location"); loc != "/auth/login" {
+			t.Errorf("Location = %q, want /auth/login", loc)
+		}
+	})
+
+	t.Run("valid_code_joins_user", func(t *testing.T) {
+		h := NewHandlers(store, authWrap, authWrap)
+		mux := http.NewServeMux()
+		h.Register(mux)
+
+		req := httptest.NewRequest("GET", "/join/"+token, nil)
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+
+		if w.Code != http.StatusSeeOther {
+			t.Errorf("status = %d, want %d", w.Code, http.StatusSeeOther)
+		}
+		want := "/app/" + space.Slug + "/board"
+		if loc := w.Header().Get("Location"); loc != want {
+			t.Errorf("Location = %q, want %q", loc, want)
+		}
+		if !store.IsMember(t.Context(), space.ID, testUser.ID) {
+			t.Error("user should be a member after joining via invite")
+		}
+	})
+
+	t.Run("invalid_code_404", func(t *testing.T) {
+		h := NewHandlers(store, authWrap, authWrap)
+		mux := http.NewServeMux()
+		h.Register(mux)
+
+		req := httptest.NewRequest("GET", "/join/nonexistent-token", nil)
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+
+		if w.Code != http.StatusNotFound {
+			t.Errorf("status = %d, want %d", w.Code, http.StatusNotFound)
+		}
+	})
+}

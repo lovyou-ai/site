@@ -419,6 +419,16 @@ ALTER TABLE agent_memories ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT '
 ALTER TABLE agent_memories ADD COLUMN IF NOT EXISTS source_id TEXT NOT NULL DEFAULT '';
 ALTER TABLE agent_memories ADD COLUMN IF NOT EXISTS importance INT NOT NULL DEFAULT 5;
 ALTER TABLE agent_personas ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ;
+
+CREATE TABLE IF NOT EXISTS invite_uses (
+    token   TEXT NOT NULL REFERENCES invites(token) ON DELETE CASCADE,
+    user_id TEXT NOT NULL,
+    used_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (token, user_id)
+);
+ALTER TABLE invites ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+ALTER TABLE invites ADD COLUMN IF NOT EXISTS max_uses INT NOT NULL DEFAULT 0;
+ALTER TABLE invites ADD COLUMN IF NOT EXISTS use_count INT NOT NULL DEFAULT 0;
 `)
 	return err
 }
@@ -1749,6 +1759,75 @@ func (s *Store) GetInviteToken(ctx context.Context, spaceID string) string {
 	var token string
 	s.db.QueryRowContext(ctx, `SELECT token FROM invites WHERE space_id = $1 ORDER BY created_at DESC LIMIT 1`, spaceID).Scan(&token)
 	return token
+}
+
+// InviteCode holds full invite code data including expiry and usage limits.
+type InviteCode struct {
+	Token     string
+	SpaceID   string
+	CreatedBy string
+	CreatedAt time.Time
+	ExpiresAt *time.Time
+	MaxUses   int
+	UseCount  int
+}
+
+// CreateInviteCode creates an invite code with optional expiry and max uses (0 = unlimited).
+func (s *Store) CreateInviteCode(ctx context.Context, spaceID, createdBy string, expiresAt *time.Time, maxUses int) (string, error) {
+	token := newID()
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO invites (token, space_id, created_by, expires_at, max_uses) VALUES ($1, $2, $3, $4, $5)`,
+		token, spaceID, createdBy, expiresAt, maxUses)
+	if err != nil {
+		return "", fmt.Errorf("create invite code: %w", err)
+	}
+	return token, nil
+}
+
+// GetInviteCode returns an invite code if it exists and is still valid (not expired, not exhausted).
+// Returns nil, nil if not found, expired, or exhausted.
+func (s *Store) GetInviteCode(ctx context.Context, token string) (*InviteCode, error) {
+	var inv InviteCode
+	var expiresAt sql.NullTime
+	err := s.db.QueryRowContext(ctx,
+		`SELECT token, space_id, created_by, created_at, expires_at, max_uses, use_count
+		 FROM invites WHERE token = $1`, token).
+		Scan(&inv.Token, &inv.SpaceID, &inv.CreatedBy, &inv.CreatedAt, &expiresAt, &inv.MaxUses, &inv.UseCount)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get invite code: %w", err)
+	}
+	if expiresAt.Valid {
+		inv.ExpiresAt = &expiresAt.Time
+		if time.Now().After(expiresAt.Time) {
+			return nil, nil
+		}
+	}
+	if inv.MaxUses > 0 && inv.UseCount >= inv.MaxUses {
+		return nil, nil
+	}
+	return &inv, nil
+}
+
+// UseInviteCode records a use by userID. Idempotent per (token, userID) — increments use_count only on first use.
+func (s *Store) UseInviteCode(ctx context.Context, token, userID string) error {
+	res, err := s.db.ExecContext(ctx,
+		`INSERT INTO invite_uses (token, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+		token, userID)
+	if err != nil {
+		return fmt.Errorf("use invite code: %w", err)
+	}
+	rows, _ := res.RowsAffected()
+	if rows > 0 {
+		_, err = s.db.ExecContext(ctx,
+			`UPDATE invites SET use_count = use_count + 1 WHERE token = $1`, token)
+		if err != nil {
+			return fmt.Errorf("increment invite use count: %w", err)
+		}
+	}
+	return nil
 }
 
 // ────────────────────────────────────────────────────────────────────

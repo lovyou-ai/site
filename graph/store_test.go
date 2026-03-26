@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	_ "github.com/lib/pq"
 )
@@ -1237,4 +1238,118 @@ func TestListHiveActivity_FiltersAndLimits(t *testing.T) {
 	if len(limited) != 2 {
 		t.Errorf("LIMIT: got %d posts, want 2", len(limited))
 	}
+}
+
+func TestInviteCode(t *testing.T) {
+	_, store := testDB(t)
+	ctx := context.Background()
+
+	space, err := store.CreateSpace(ctx, "invite-code-test", "Invite Code Test", "", "owner-1", "project", "private")
+	if err != nil {
+		t.Fatalf("create space: %v", err)
+	}
+	t.Cleanup(func() { store.DeleteSpace(ctx, space.ID) })
+
+	t.Run("create_and_get_happy_path", func(t *testing.T) {
+		token, err := store.CreateInviteCode(ctx, space.ID, "owner-1", nil, 0)
+		if err != nil {
+			t.Fatalf("create invite code: %v", err)
+		}
+		got, err := store.GetInviteCode(ctx, token)
+		if err != nil {
+			t.Fatalf("get invite code: %v", err)
+		}
+		if got == nil {
+			t.Fatal("expected invite code, got nil")
+		}
+		if got.SpaceID != space.ID {
+			t.Errorf("space_id = %q, want %q", got.SpaceID, space.ID)
+		}
+		if got.ExpiresAt != nil {
+			t.Errorf("expires_at should be nil for unlimited invite")
+		}
+		if got.MaxUses != 0 {
+			t.Errorf("max_uses = %d, want 0 (unlimited)", got.MaxUses)
+		}
+	})
+
+	t.Run("get_nonexistent", func(t *testing.T) {
+		got, err := store.GetInviteCode(ctx, "no-such-token")
+		if err != nil {
+			t.Fatalf("get invite code: %v", err)
+		}
+		if got != nil {
+			t.Error("expected nil for nonexistent token")
+		}
+	})
+
+	t.Run("expired", func(t *testing.T) {
+		past := time.Now().Add(-time.Hour)
+		token, err := store.CreateInviteCode(ctx, space.ID, "owner-1", &past, 0)
+		if err != nil {
+			t.Fatalf("create invite code: %v", err)
+		}
+		got, err := store.GetInviteCode(ctx, token)
+		if err != nil {
+			t.Fatalf("get invite code: %v", err)
+		}
+		if got != nil {
+			t.Error("expected nil for expired invite, got non-nil")
+		}
+	})
+
+	t.Run("exhausted", func(t *testing.T) {
+		token, err := store.CreateInviteCode(ctx, space.ID, "owner-1", nil, 1)
+		if err != nil {
+			t.Fatalf("create invite code: %v", err)
+		}
+		if err := store.UseInviteCode(ctx, token, "user-a"); err != nil {
+			t.Fatalf("use invite code: %v", err)
+		}
+		got, err := store.GetInviteCode(ctx, token)
+		if err != nil {
+			t.Fatalf("get invite code: %v", err)
+		}
+		if got != nil {
+			t.Error("expected nil for exhausted invite (max_uses=1, use_count=1)")
+		}
+	})
+
+	t.Run("use_idempotent", func(t *testing.T) {
+		token, err := store.CreateInviteCode(ctx, space.ID, "owner-1", nil, 5)
+		if err != nil {
+			t.Fatalf("create invite code: %v", err)
+		}
+		// Same user uses twice — should only count once.
+		if err := store.UseInviteCode(ctx, token, "user-b"); err != nil {
+			t.Fatalf("first use: %v", err)
+		}
+		if err := store.UseInviteCode(ctx, token, "user-b"); err != nil {
+			t.Fatalf("second use: %v", err)
+		}
+		got, err := store.GetInviteCode(ctx, token)
+		if err != nil {
+			t.Fatalf("get invite code: %v", err)
+		}
+		if got == nil {
+			t.Fatal("invite should still be valid")
+		}
+		if got.UseCount != 1 {
+			t.Errorf("use_count = %d, want 1 (idempotent)", got.UseCount)
+		}
+		// Different user uses — should count independently.
+		if err := store.UseInviteCode(ctx, token, "user-c"); err != nil {
+			t.Fatalf("use by different user: %v", err)
+		}
+		got2, err := store.GetInviteCode(ctx, token)
+		if err != nil {
+			t.Fatalf("get invite code after second user: %v", err)
+		}
+		if got2 == nil {
+			t.Fatal("invite should still be valid")
+		}
+		if got2.UseCount != 2 {
+			t.Errorf("use_count = %d, want 2", got2.UseCount)
+		}
+	})
 }
