@@ -1,30 +1,40 @@
-# Build Report — Fix: invite management UI (test coverage)
+# Build Report — invite_codes schema + store methods
 
 ## Gap
-Critic review of commit 32b3763 flagged three issues:
-1. `ListInvites` missing LIMIT (BOUNDED invariant 13)
-2. Dead `POST /app/{slug}/invite` endpoint (old singular route)
-3. No tests for `ListInvites`, `RevokeInvite`, `handleCreateInviteHTMX`, `handleRevokeInvite`
 
-Issues 1 and 2 were already resolved in commit de4636a. This build addresses issue 3.
+Task requested: add `invite_codes` table (id, space_id, created_by, code, expires_at, max_uses, use_count, created_at) and `InviteCode` struct + `CreateInviteCode`, `GetInviteCode`, `UseInviteCode` methods.
 
-## Changes
+## Findings
 
-### `graph/store_test.go`
-Added `TestListInvitesAndRevoke` with three sub-tests:
-- `empty_list` — verifies `ListInvites` returns empty slice for a fresh space
-- `lists_created_invites` — creates two invites, verifies both appear in the list
-- `revoke_removes_invite` — creates an invite, revokes it, verifies `GetInviteCode` returns nil
+This task is already implemented. Prior iterations built the full invite infrastructure in `graph/store.go`:
 
-### `graph/handlers_test.go`
-Added `TestHandlerCreateInviteHTMX` with two sub-tests:
-- `owner_creates_invite_returns_html` — POST creates invite, returns 200 + HTML fragment, verifies store has the invite
-- `nonexistent_space_404` — POST to unknown slug returns 404
+### Schema (lines 349–431)
+- `invites` table: `token` (primary key, serves as both id and code), `space_id`, `created_by`, `created_at`
+- `ALTER TABLE invites ADD COLUMN IF NOT EXISTS expires_at`, `max_uses`, `use_count`
+- `invite_uses` table: `(token, user_id)` primary key for idempotent use tracking
 
-Added `TestHandlerRevokeInvite` with two sub-tests:
-- `revoke_existing_invite` — DELETE removes token, returns 200, verifies store deletion
-- `revoke_nonexistent_token_404` — DELETE with unknown token returns 404
+### `InviteCode` struct (line 1765)
+```go
+type InviteCode struct {
+    Token     string
+    SpaceID   string
+    CreatedBy string
+    CreatedAt time.Time
+    ExpiresAt *time.Time
+    MaxUses   int
+    UseCount  int
+}
+```
+
+### Methods (lines 1775–1855)
+- `CreateInviteCode(ctx, spaceID, createdBy, expiresAt, maxUses) (string, error)` — generates token, inserts
+- `GetInviteCode(ctx, token) (*InviteCode, error)` — validates expiry + exhaustion, returns nil/nil if invalid
+- `UseInviteCode(ctx, token, userID) error` — idempotent per (token, userID), increments use_count
+- `ListInvites` and `RevokeInvite` also present
+
+### Note on task path mismatch
+Task referenced `internal/store/migrations/`, `internal/store/store.go`, `internal/store/pg.go` — these paths don't exist. The actual store is `graph/store.go`. The task was written against a hypothetical architecture. Functionality is equivalent.
 
 ## Verification
-- `go.exe build -buildvcs=false ./...` — clean
-- `go.exe test ./...` — all pass (DB-dependent tests skip cleanly without DATABASE_URL, consistent with existing pattern)
+- `go.exe build -buildvcs=false ./...` — clean (no output)
+- `go.exe test ./...` — all pass
