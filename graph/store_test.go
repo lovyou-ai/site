@@ -3,6 +3,7 @@ package graph
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"testing"
@@ -335,6 +336,207 @@ func TestUpdateAndDeleteNode(t *testing.T) {
 	_, err = store.GetNode(ctx, node.ID)
 	if err != ErrNotFound {
 		t.Errorf("expected ErrNotFound after delete, got %v", err)
+	}
+}
+
+func TestUpdateNodeStateChildGate(t *testing.T) {
+	_, store := testDB(t)
+	ctx := context.Background()
+
+	space, err := store.CreateSpace(ctx, "test-child-gate", "Child Gate", "", "owner-1", "project", "public")
+	if err != nil {
+		t.Fatalf("create space: %v", err)
+	}
+	t.Cleanup(func() { store.DeleteSpace(ctx, space.ID) })
+
+	parent, err := store.CreateNode(ctx, CreateNodeParams{
+		SpaceID:  space.ID,
+		Kind:     KindTask,
+		Title:    "Parent Task",
+		Author:   "tester",
+		AuthorID: "tester-id",
+		State:    StateActive,
+	})
+	if err != nil {
+		t.Fatalf("create parent: %v", err)
+	}
+
+	child, err := store.CreateNode(ctx, CreateNodeParams{
+		SpaceID:  space.ID,
+		ParentID: parent.ID,
+		Kind:     KindTask,
+		Title:    "Child Task",
+		Author:   "tester",
+		AuthorID: "tester-id",
+		State:    StateActive,
+	})
+	if err != nil {
+		t.Fatalf("create child: %v", err)
+	}
+
+	// Completing parent with incomplete child must be rejected.
+	err = store.UpdateNodeState(ctx, parent.ID, StateDone)
+	if !errors.Is(err, ErrChildrenIncomplete) {
+		t.Fatalf("expected ErrChildrenIncomplete, got %v", err)
+	}
+
+	// Complete the child first.
+	if err := store.UpdateNodeState(ctx, child.ID, StateDone); err != nil {
+		t.Fatalf("complete child: %v", err)
+	}
+
+	// Now completing parent must succeed.
+	if err := store.UpdateNodeState(ctx, parent.ID, StateDone); err != nil {
+		t.Fatalf("complete parent after child done: %v", err)
+	}
+	got, _ := store.GetNode(ctx, parent.ID)
+	if got.State != StateDone {
+		t.Errorf("parent state = %q, want %q", got.State, StateDone)
+	}
+}
+
+// TestUpdateNodeStateChildGateLeafNode verifies that leaf nodes (no children)
+// can be completed without the gate blocking them.
+func TestUpdateNodeStateChildGateLeafNode(t *testing.T) {
+	_, store := testDB(t)
+	ctx := context.Background()
+
+	space, err := store.CreateSpace(ctx, "test-child-gate-leaf", "Child Gate Leaf", "", "owner-1", "project", "public")
+	if err != nil {
+		t.Fatalf("create space: %v", err)
+	}
+	t.Cleanup(func() { store.DeleteSpace(ctx, space.ID) })
+
+	leaf, err := store.CreateNode(ctx, CreateNodeParams{
+		SpaceID:  space.ID,
+		Kind:     KindTask,
+		Title:    "Leaf Task",
+		Author:   "tester",
+		AuthorID: "tester-id",
+		State:    StateActive,
+	})
+	if err != nil {
+		t.Fatalf("create leaf: %v", err)
+	}
+
+	// Leaf node (no children) must be completable directly.
+	if err := store.UpdateNodeState(ctx, leaf.ID, StateDone); err != nil {
+		t.Fatalf("complete leaf: %v", err)
+	}
+	got, _ := store.GetNode(ctx, leaf.ID)
+	if got.State != StateDone {
+		t.Errorf("leaf state = %q, want %q", got.State, StateDone)
+	}
+}
+
+// TestUpdateNodeStateChildGateMultipleChildren verifies partial child completion
+// still blocks parent completion, and all-done children allow it.
+func TestUpdateNodeStateChildGateMultipleChildren(t *testing.T) {
+	_, store := testDB(t)
+	ctx := context.Background()
+
+	space, err := store.CreateSpace(ctx, "test-child-gate-multi", "Child Gate Multi", "", "owner-1", "project", "public")
+	if err != nil {
+		t.Fatalf("create space: %v", err)
+	}
+	t.Cleanup(func() { store.DeleteSpace(ctx, space.ID) })
+
+	parent, err := store.CreateNode(ctx, CreateNodeParams{
+		SpaceID:  space.ID,
+		Kind:     KindTask,
+		Title:    "Parent",
+		Author:   "tester",
+		AuthorID: "tester-id",
+		State:    StateActive,
+	})
+	if err != nil {
+		t.Fatalf("create parent: %v", err)
+	}
+
+	child1, err := store.CreateNode(ctx, CreateNodeParams{
+		SpaceID:  space.ID,
+		ParentID: parent.ID,
+		Kind:     KindTask,
+		Title:    "Child 1",
+		Author:   "tester",
+		AuthorID: "tester-id",
+		State:    StateActive,
+	})
+	if err != nil {
+		t.Fatalf("create child1: %v", err)
+	}
+
+	child2, err := store.CreateNode(ctx, CreateNodeParams{
+		SpaceID:  space.ID,
+		ParentID: parent.ID,
+		Kind:     KindTask,
+		Title:    "Child 2",
+		Author:   "tester",
+		AuthorID: "tester-id",
+		State:    StateActive,
+	})
+	if err != nil {
+		t.Fatalf("create child2: %v", err)
+	}
+
+	// Complete only child1 — parent still blocked by child2.
+	if err := store.UpdateNodeState(ctx, child1.ID, StateDone); err != nil {
+		t.Fatalf("complete child1: %v", err)
+	}
+	if err := store.UpdateNodeState(ctx, parent.ID, StateDone); !errors.Is(err, ErrChildrenIncomplete) {
+		t.Fatalf("expected ErrChildrenIncomplete with one incomplete child, got %v", err)
+	}
+
+	// Complete child2 — parent now completable.
+	if err := store.UpdateNodeState(ctx, child2.ID, StateDone); err != nil {
+		t.Fatalf("complete child2: %v", err)
+	}
+	if err := store.UpdateNodeState(ctx, parent.ID, StateDone); err != nil {
+		t.Fatalf("complete parent after all children done: %v", err)
+	}
+}
+
+// TestUpdateNodeStateNonDoneSkipsGate verifies that the child-completion gate
+// only fires when transitioning to StateDone — other state changes are unblocked.
+func TestUpdateNodeStateNonDoneSkipsGate(t *testing.T) {
+	_, store := testDB(t)
+	ctx := context.Background()
+
+	space, err := store.CreateSpace(ctx, "test-child-gate-nondone", "Child Gate NonDone", "", "owner-1", "project", "public")
+	if err != nil {
+		t.Fatalf("create space: %v", err)
+	}
+	t.Cleanup(func() { store.DeleteSpace(ctx, space.ID) })
+
+	parent, err := store.CreateNode(ctx, CreateNodeParams{
+		SpaceID:  space.ID,
+		Kind:     KindTask,
+		Title:    "Parent",
+		Author:   "tester",
+		AuthorID: "tester-id",
+		State:    StateActive,
+	})
+	if err != nil {
+		t.Fatalf("create parent: %v", err)
+	}
+
+	// Add an incomplete child.
+	_, err = store.CreateNode(ctx, CreateNodeParams{
+		SpaceID:  space.ID,
+		ParentID: parent.ID,
+		Kind:     KindTask,
+		Title:    "Incomplete Child",
+		Author:   "tester",
+		AuthorID: "tester-id",
+		State:    StateActive,
+	})
+	if err != nil {
+		t.Fatalf("create child: %v", err)
+	}
+
+	// Setting to StateReview (non-done) must not trigger the gate.
+	if err := store.UpdateNodeState(ctx, parent.ID, StateReview); err != nil {
+		t.Fatalf("set parent to review with incomplete child: %v", err)
 	}
 }
 

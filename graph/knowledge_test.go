@@ -241,6 +241,113 @@ func TestKnowledgeClaimsCausesFieldPresent(t *testing.T) {
 	}
 }
 
+// TestAssertOpMultipleCauses verifies that op=assert with a comma-separated causes
+// string stores all causes and returns them on subsequent reads.
+// The handler uses populateFormFromJSON (map[string]string decode) so multiple
+// causes must be passed as a comma-separated string, not a JSON array.
+func TestAssertOpMultipleCauses(t *testing.T) {
+	_, store := testDB(t)
+	slug := fmt.Sprintf("test-multi-causes-%d", time.Now().UnixNano())
+	space, err := store.CreateSpace(t.Context(), slug, "Multi Causes Test", "", "owner-1", "project", "public")
+	if err != nil {
+		t.Fatalf("create space: %v", err)
+	}
+	t.Cleanup(func() { store.DeleteSpace(t.Context(), space.ID) })
+
+	// Create two cause nodes.
+	cause1, err := store.CreateNode(t.Context(), CreateNodeParams{
+		SpaceID:    space.ID,
+		Kind:       KindDocument,
+		Title:      "Evidence A",
+		AuthorID:   "owner-1",
+		AuthorKind: "human",
+	})
+	if err != nil {
+		t.Fatalf("create cause1: %v", err)
+	}
+	cause2, err := store.CreateNode(t.Context(), CreateNodeParams{
+		SpaceID:    space.ID,
+		Kind:       KindDocument,
+		Title:      "Evidence B",
+		AuthorID:   "owner-1",
+		AuthorKind: "human",
+	})
+	if err != nil {
+		t.Fatalf("create cause2: %v", err)
+	}
+
+	testUser := &auth.User{ID: "owner-1", Name: "Owner", Email: "owner@test.com", Kind: "human"}
+	wrap := func(next http.HandlerFunc) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := auth.ContextWithUser(r.Context(), testUser)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+	h := NewHandlers(store, wrap, wrap)
+	mux := http.NewServeMux()
+	h.Register(mux)
+
+	// Pass two causes as a comma-separated string (populateFormFromJSON decodes
+	// JSON as map[string]string, so arrays are not supported — use CSV).
+	causesCSV := fmt.Sprintf("%s,%s", cause1.ID, cause2.ID)
+	payload := fmt.Sprintf(`{"op":"assert","kind":"claim","title":"Multi-caused claim","body":"Two causes","causes":%q}`, causesCSV)
+	req := httptest.NewRequest("POST", "/app/"+slug+"/op", strings.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("assert op: status = %d, want 201; body: %s", w.Code, w.Body.String())
+	}
+
+	var resp struct {
+		Node Node `json:"node"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(resp.Node.Causes) != 2 {
+		t.Fatalf("causes len = %d, want 2; causes = %v", len(resp.Node.Causes), resp.Node.Causes)
+	}
+	causeSet := map[string]bool{cause1.ID: true, cause2.ID: true}
+	for _, c := range resp.Node.Causes {
+		if !causeSet[c] {
+			t.Errorf("unexpected cause %q in response", c)
+		}
+	}
+
+	// Confirm /knowledge also returns both causes.
+	req2 := httptest.NewRequest("GET", "/app/"+slug+"/knowledge?tab=claims", nil)
+	req2.Header.Set("Accept", "application/json")
+	w2 := httptest.NewRecorder()
+	mux.ServeHTTP(w2, req2)
+
+	if w2.Code != http.StatusOK {
+		t.Fatalf("knowledge: status = %d, want 200; body: %s", w2.Code, w2.Body.String())
+	}
+
+	var kr struct {
+		Claims []Node `json:"claims"`
+	}
+	if err := json.NewDecoder(w2.Body).Decode(&kr); err != nil {
+		t.Fatalf("decode knowledge response: %v", err)
+	}
+	var found *Node
+	for i := range kr.Claims {
+		if kr.Claims[i].Title == "Multi-caused claim" {
+			found = &kr.Claims[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatal("claim not found in /knowledge response")
+	}
+	if len(found.Causes) != 2 {
+		t.Errorf("causes in /knowledge = %v, want 2 entries", found.Causes)
+	}
+}
+
 // TestKnowledgeMissingSpace verifies GET /app/{slug}/knowledge returns 404 when the
 // space does not exist.
 func TestKnowledgeMissingSpace(t *testing.T) {

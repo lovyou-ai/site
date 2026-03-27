@@ -206,7 +206,8 @@ type ListNodesParams struct {
 // ────────────────────────────────────────────────────────────────────
 
 var (
-	ErrNotFound = errors.New("not found")
+	ErrNotFound            = errors.New("not found")
+	ErrChildrenIncomplete  = errors.New("cannot complete task: incomplete children")
 )
 
 // ────────────────────────────────────────────────────────────────────
@@ -1259,6 +1260,17 @@ func (s *Store) ListCouncilSessions(ctx context.Context, spaceID string, limit i
 
 // UpdateNodeState sets a node's state.
 func (s *Store) UpdateNodeState(ctx context.Context, id, state string) error {
+	if state == StateDone {
+		var incomplete int
+		if err := s.db.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM nodes WHERE parent_id = $1 AND state != 'done'`, id,
+		).Scan(&incomplete); err != nil {
+			return fmt.Errorf("check children: %w", err)
+		}
+		if incomplete > 0 {
+			return ErrChildrenIncomplete
+		}
+	}
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE nodes SET state = $1, updated_at = NOW() WHERE id = $2`,
 		state, id,
