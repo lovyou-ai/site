@@ -3975,16 +3975,33 @@ func (h *Handlers) handleHive(w http.ResponseWriter, r *http.Request) {
 	// Supplement with database data so deployed instances show real numbers.
 	agentID := h.store.GetHiveAgentID(ctx)
 	if agentID != "" {
-		totalOps, _, _ := h.store.GetHiveTotals(ctx, agentID)
-		iterCount := parseIterFromPosts(nil) // will be 0
+		totalOps, lastActive, _ := h.store.GetHiveTotals(ctx, agentID)
 		posts, _ := h.store.ListHiveActivity(ctx, agentID, maxHivePosts)
+
+		// Iteration count: try "iter N" in post titles, fall back to done task count.
 		if ic := parseIterFromPosts(posts); ic > ls.Iteration {
 			ls.Iteration = ic
 		}
+		if ls.Iteration == 0 {
+			// Count done tasks as iteration proxy.
+			tasks, _ := h.store.ListHiveAgentTasks(ctx, agentID, 1000)
+			doneCount := 0
+			for _, t := range tasks {
+				if t.State == "done" {
+					doneCount++
+				}
+			}
+			if doneCount > ls.Iteration {
+				ls.Iteration = doneCount
+			}
+		}
+
 		if totalOps > 0 && ls.Phase == "" {
 			ls.Phase = "idle"
 		}
-		_ = iterCount
+		if !lastActive.IsZero() && ls.BuildTitle == "" {
+			ls.BuildTitle = "Last active: " + lastActive.Format("2006-01-02 15:04")
+		}
 	}
 
 	HivePage(ls, entries, commits, h.viewUser(r)).Render(ctx, w)
