@@ -3958,9 +3958,12 @@ func parseIterFromPosts(posts []Node) int {
 	return best
 }
 
-// handleHive renders the public /hive dashboard showing iteration status, phase timeline, and recent commits.
+// handleHive renders the public /hive dashboard.
+// Reads from the DATABASE first (works on Fly), falls back to local files (dev).
 func (h *Handlers) handleHive(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+
+	// Local file data (dev only — empty on Fly, and that's fine).
 	ls := readLoopState(h.loopDir)
 	entries := readDiagnostics(h.loopDir, maxHiveDiagEntries)
 	repoDir := ""
@@ -3968,6 +3971,22 @@ func (h *Handlers) handleHive(w http.ResponseWriter, r *http.Request) {
 		repoDir = filepath.Dir(h.loopDir)
 	}
 	commits := readRecentCommits(repoDir, 10)
+
+	// Supplement with database data so deployed instances show real numbers.
+	agentID := h.store.GetHiveAgentID(ctx)
+	if agentID != "" {
+		totalOps, _, _ := h.store.GetHiveTotals(ctx, agentID)
+		iterCount := parseIterFromPosts(nil) // will be 0
+		posts, _ := h.store.ListHiveActivity(ctx, agentID, maxHivePosts)
+		if ic := parseIterFromPosts(posts); ic > ls.Iteration {
+			ls.Iteration = ic
+		}
+		if totalOps > 0 && ls.Phase == "" {
+			ls.Phase = "idle"
+		}
+		_ = iterCount
+	}
+
 	HivePage(ls, entries, commits, h.viewUser(r)).Render(ctx, w)
 }
 
