@@ -430,6 +430,71 @@ func TestMembership(t *testing.T) {
 	}
 }
 
+func TestNodeMembership(t *testing.T) {
+	_, store := testDB(t)
+	ctx := context.Background()
+
+	space, _ := store.CreateSpace(ctx, "test-node-membership", "Node Membership Test", "", "owner-1", "project", "public")
+	t.Cleanup(func() { store.DeleteSpace(ctx, space.ID) })
+
+	team, err := store.CreateNode(ctx, CreateNodeParams{
+		SpaceID:  space.ID,
+		Kind:     KindTeam,
+		Title:    "Engineering",
+		AuthorID: "owner-1",
+		Author:   "Owner",
+	})
+	if err != nil {
+		t.Fatalf("create team: %v", err)
+	}
+
+	// Not a member initially.
+	if store.IsNodeMember(ctx, team.ID, "user-1") {
+		t.Error("should not be a node member initially")
+	}
+	if store.NodeMemberCount(ctx, team.ID) != 0 {
+		t.Errorf("node member count = %d, want 0", store.NodeMemberCount(ctx, team.ID))
+	}
+
+	// Join.
+	if err := store.JoinNodeMember(ctx, team.ID, "user-1"); err != nil {
+		t.Fatalf("join node: %v", err)
+	}
+	if !store.IsNodeMember(ctx, team.ID, "user-1") {
+		t.Error("should be a node member after joining")
+	}
+	if store.NodeMemberCount(ctx, team.ID) != 1 {
+		t.Errorf("node member count = %d, want 1", store.NodeMemberCount(ctx, team.ID))
+	}
+
+	// Duplicate join is a no-op.
+	store.JoinNodeMember(ctx, team.ID, "user-1")
+	if store.NodeMemberCount(ctx, team.ID) != 1 {
+		t.Errorf("node member count = %d, want 1 after duplicate join", store.NodeMemberCount(ctx, team.ID))
+	}
+
+	// ListTeamMembers.
+	members, err := store.ListTeamMembers(ctx, space.ID, team.ID)
+	if err != nil {
+		t.Fatalf("list team members: %v", err)
+	}
+	if len(members) != 1 {
+		t.Errorf("team members = %d, want 1", len(members))
+	}
+	if members[0].UserID != "user-1" {
+		t.Errorf("member user_id = %q, want %q", members[0].UserID, "user-1")
+	}
+
+	// Leave.
+	store.LeaveNodeMember(ctx, team.ID, "user-1")
+	if store.IsNodeMember(ctx, team.ID, "user-1") {
+		t.Error("should not be a node member after leaving")
+	}
+	if store.NodeMemberCount(ctx, team.ID) != 0 {
+		t.Errorf("node member count = %d, want 0 after leave", store.NodeMemberCount(ctx, team.ID))
+	}
+}
+
 func TestAvailableTasks(t *testing.T) {
 	_, store := testDB(t)
 	ctx := context.Background()

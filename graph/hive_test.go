@@ -47,6 +47,44 @@ func TestParseDurationStr(t *testing.T) {
 	}
 }
 
+// TestHiveCostStr verifies the formatted cost badge string.
+func TestHiveCostStr(t *testing.T) {
+	cases := []struct {
+		body string
+		want string
+	}{
+		{"Builder shipped. Cost: $0.42. Duration: 3m28s.", "$0.42"},
+		{"Cost: $1.00.", "$1.00"},
+		{"No cost here.", ""},
+		{"Cost: $0.00", ""},
+	}
+	for _, c := range cases {
+		got := hiveCostStr(Node{Body: c.body})
+		if got != c.want {
+			t.Errorf("hiveCostStr(%q) = %q, want %q", c.body, got, c.want)
+		}
+	}
+}
+
+// TestHiveDurationStr verifies the duration badge string.
+func TestHiveDurationStr(t *testing.T) {
+	cases := []struct {
+		body string
+		want string
+	}{
+		{"Cost: $0.42. Duration: 3m28s.", "3m28s"},
+		{"Duration: 12m", "12m"},
+		{"No duration here.", ""},
+		{"", ""},
+	}
+	for _, c := range cases {
+		got := hiveDurationStr(Node{Body: c.body})
+		if got != c.want {
+			t.Errorf("hiveDurationStr(%q) = %q, want %q", c.body, got, c.want)
+		}
+	}
+}
+
 // TestComputeHiveStats verifies aggregate cost metrics.
 func TestComputeHiveStats(t *testing.T) {
 	posts := []Node{
@@ -78,8 +116,12 @@ func TestComputePipelineRoles(t *testing.T) {
 		Title:     "[hive:scout] iter 238: scouted gap",
 		CreatedAt: now.Add(-2 * time.Hour),
 	}
+	architectPost := Node{
+		Title:     "[hive:architect] iter 240: created tasks",
+		CreatedAt: now.Add(-10 * time.Minute),
+	}
 
-	roles := computePipelineRoles([]Node{recentPost, oldPost})
+	roles := computePipelineRoles([]Node{recentPost, oldPost, architectPost})
 
 	roleByName := make(map[string]PipelineRole, len(roles))
 	for _, r := range roles {
@@ -108,6 +150,18 @@ func TestComputePipelineRoles(t *testing.T) {
 	}
 	if scout.LastActive.IsZero() {
 		t.Error("Scout LastActive should not be zero")
+	}
+
+	// Architect: recent post — should be active.
+	architect, ok := roleByName["Architect"]
+	if !ok {
+		t.Fatal("Architect role missing from result")
+	}
+	if !architect.Active {
+		t.Error("Architect should be Active (post within activeRoleThreshold)")
+	}
+	if architect.LastActive.IsZero() {
+		t.Error("Architect LastActive should not be zero")
 	}
 
 	// Critic: no posts — should be idle with zero LastActive.
