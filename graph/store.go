@@ -25,11 +25,12 @@ import (
 
 // Node states.
 const (
-	StateOpen   = "open"
-	StateActive = "active"
-	StateReview = "review"
-	StateDone   = "done"
-	StateClosed = "closed"
+	StateOpen    = "open"
+	StateActive  = "active"
+	StateReview  = "review"
+	StateBlocked = "blocked" // incomplete children or unresolved dependencies
+	StateDone    = "done"
+	StateClosed  = "closed"
 )
 
 // Task priorities.

@@ -3742,6 +3742,7 @@ func groupByState(nodes []Node) []BoardColumn {
 	columns := []BoardColumn{
 		{State: StateOpen, Label: "Open"},
 		{State: StateActive, Label: "Active"},
+		{State: StateBlocked, Label: "Blocked"},
 		{State: StateReview, Label: "Review"},
 		{State: StateDone, Label: "Done"},
 	}
