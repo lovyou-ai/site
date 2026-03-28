@@ -241,10 +241,9 @@ func TestKnowledgeClaimsCausesFieldPresent(t *testing.T) {
 	}
 }
 
-// TestAssertOpMultipleCauses verifies that op=assert with a comma-separated causes
-// string stores all causes and returns them on subsequent reads.
-// The handler uses populateFormFromJSON (map[string]string decode) so multiple
-// causes must be passed as a comma-separated string, not a JSON array.
+// TestAssertOpMultipleCauses verifies that op=assert with a JSON array causes
+// field stores all causes and returns them on subsequent reads.
+// populateFormFromJSON decodes JSON arrays to CSV so both formats work.
 func TestAssertOpMultipleCauses(t *testing.T) {
 	_, store := testDB(t)
 	slug := fmt.Sprintf("test-multi-causes-%d", time.Now().UnixNano())
@@ -287,10 +286,8 @@ func TestAssertOpMultipleCauses(t *testing.T) {
 	mux := http.NewServeMux()
 	h.Register(mux)
 
-	// Pass two causes as a comma-separated string (populateFormFromJSON decodes
-	// JSON as map[string]string, so arrays are not supported — use CSV).
-	causesCSV := fmt.Sprintf("%s,%s", cause1.ID, cause2.ID)
-	payload := fmt.Sprintf(`{"op":"assert","kind":"claim","title":"Multi-caused claim","body":"Two causes","causes":%q}`, causesCSV)
+	// Pass two causes as a JSON array — populateFormFromJSON converts to CSV.
+	payload := fmt.Sprintf(`{"op":"assert","kind":"claim","title":"Multi-caused claim","body":"Two causes","causes":[%q,%q]}`, cause1.ID, cause2.ID)
 	req := httptest.NewRequest("POST", "/app/"+slug+"/op", strings.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -1608,5 +1609,103 @@ func TestHandlerOpEditCauses(t *testing.T) {
 			t.Errorf("status = %d, want %d (400) when neither body nor causes provided; body: %s",
 				w.Code, http.StatusBadRequest, w.Body.String())
 		}
+	})
+}
+
+// TestPopulateFormFromJSON is a pure unit test for the populateFormFromJSON helper.
+// No database required.
+func TestPopulateFormFromJSON(t *testing.T) {
+	makeReq := func(contentType, body string) *http.Request {
+		r, _ := http.NewRequest("POST", "/", strings.NewReader(body))
+		r.Header.Set("Content-Type", contentType)
+		return r
+	}
+
+	t.Run("array causes to CSV", func(t *testing.T) {
+		r := makeReq("application/json", `{"op":"assert","causes":["id1","id2"]}`)
+		populateFormFromJSON(r)
+		if got := r.FormValue("op"); got != "assert" {
+			t.Errorf("op = %q, want %q", got, "assert")
+		}
+		if got := r.FormValue("causes"); got != "id1,id2" {
+			t.Errorf("causes = %q, want %q", got, "id1,id2")
+		}
+	})
+
+	t.Run("string value pass-through", func(t *testing.T) {
+		r := makeReq("application/json", `{"title":"hello world"}`)
+		populateFormFromJSON(r)
+		if got := r.FormValue("title"); got != "hello world" {
+			t.Errorf("title = %q, want %q", got, "hello world")
+		}
+	})
+
+	t.Run("non-JSON content-type is no-op", func(t *testing.T) {
+		r := makeReq("application/x-www-form-urlencoded", `{"op":"assert"}`)
+		populateFormFromJSON(r)
+		if r.Form != nil && r.FormValue("op") != "" {
+			t.Errorf("expected no form population for non-JSON content-type")
+		}
+	})
+
+	t.Run("invalid JSON is no-op (no panic)", func(t *testing.T) {
+		r := makeReq("application/json", `{not valid json`)
+		populateFormFromJSON(r) // must not panic
+		if r.Form != nil && len(r.Form) != 0 {
+			t.Errorf("expected empty form for invalid JSON")
+		}
+	})
+
+	t.Run("empty array produces empty string", func(t *testing.T) {
+		r := makeReq("application/json", `{"causes":[]}`)
+		populateFormFromJSON(r)
+		if got := r.FormValue("causes"); got != "" {
+			t.Errorf("causes = %q, want empty string for empty array", got)
+		}
+	})
+
+	t.Run("null value is skipped", func(t *testing.T) {
+		r := makeReq("application/json", `{"causes":null,"op":"assert"}`)
+		populateFormFromJSON(r)
+		if got := r.FormValue("causes"); got != "" {
+			t.Errorf("causes = %q, want empty (null should be skipped)", got)
+		}
+		if got := r.FormValue("op"); got != "assert" {
+			t.Errorf("op = %q, want %q", got, "assert")
+		}
+	})
+
+	t.Run("numeric value via fmt.Sprintf", func(t *testing.T) {
+		r := makeReq("application/json", `{"priority":5}`)
+		populateFormFromJSON(r)
+		if got := r.FormValue("priority"); got != "5" {
+			t.Errorf("priority = %q, want %q", got, "5")
+		}
+	})
+
+	t.Run("content-type with charset suffix", func(t *testing.T) {
+		r := makeReq("application/json; charset=utf-8", `{"op":"intend"}`)
+		populateFormFromJSON(r)
+		if got := r.FormValue("op"); got != "intend" {
+			t.Errorf("op = %q, want %q", got, "intend")
+		}
+	})
+
+	t.Run("array with non-string items drops non-strings", func(t *testing.T) {
+		r := makeReq("application/json", `{"causes":["id1",42,"id2"]}`)
+		populateFormFromJSON(r)
+		// 42 is a number, not a string — dropped silently; id1 and id2 are kept
+		if got := r.FormValue("causes"); got != "id1,id2" {
+			t.Errorf("causes = %q, want %q", got, "id1,id2")
+		}
+	})
+
+	// Ensure the body is consumed only once — calling on a request with no body
+	// should not panic.
+	t.Run("empty body is no-op", func(t *testing.T) {
+		r, _ := http.NewRequest("POST", "/", nil)
+		r.Header.Set("Content-Type", "application/json")
+		r.Body = io.NopCloser(strings.NewReader(""))
+		populateFormFromJSON(r) // must not panic
 	})
 }

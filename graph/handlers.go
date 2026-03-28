@@ -519,11 +519,13 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 // populateFormFromJSON parses a JSON request body into r.Form
 // so r.FormValue() works for both form-encoded and JSON requests.
+// JSON array values (e.g. causes:["id1","id2"]) are converted to CSV
+// strings so r.FormValue("causes") returns "id1,id2".
 func populateFormFromJSON(r *http.Request) {
 	if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
 		return
 	}
-	var m map[string]string
+	var m map[string]any
 	if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
 		return
 	}
@@ -531,7 +533,23 @@ func populateFormFromJSON(r *http.Request) {
 		r.Form = url.Values{}
 	}
 	for k, v := range m {
-		r.Form.Set(k, v)
+		switch val := v.(type) {
+		case string:
+			r.Form.Set(k, val)
+		case []interface{}:
+			// Convert JSON array to CSV for form compatibility.
+			parts := make([]string, 0, len(val))
+			for _, item := range val {
+				if s, ok := item.(string); ok {
+					parts = append(parts, s)
+				}
+			}
+			r.Form.Set(k, strings.Join(parts, ","))
+		case nil:
+			// skip
+		default:
+			r.Form.Set(k, fmt.Sprintf("%v", val))
+		}
 	}
 }
 
