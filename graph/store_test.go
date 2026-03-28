@@ -2080,4 +2080,485 @@ func TestGovernanceDelegation(t *testing.T) {
 			t.Errorf("tie vote state = %q, want %q", node.State, ProposalFailed)
 		}
 	})
+
+	t.Run("get_user_delegation", func(t *testing.T) {
+		// delegate-2 is not delegating at this point.
+		_, _, exists := store.GetUserDelegation(ctx, space.ID, "delegate-2")
+		if exists {
+			t.Error("GetUserDelegation for non-delegating user = true, want false")
+		}
+		// Set up delegation: delegator-1 → delegate-2.
+		if err := store.Delegate(ctx, space.ID, "delegator-1", "delegate-2"); err != nil {
+			t.Fatalf("Delegate: %v", err)
+		}
+		dID, dName, exists := store.GetUserDelegation(ctx, space.ID, "delegator-1")
+		if !exists {
+			t.Error("GetUserDelegation after Delegate = false, want true")
+		}
+		if dID != "delegate-2" {
+			t.Errorf("GetUserDelegation dID = %q, want %q", dID, "delegate-2")
+		}
+		if dName == "" {
+			t.Error("GetUserDelegation dName is empty, want non-empty")
+		}
+		store.Undelegate(ctx, space.ID, "delegator-1")
+	})
+
+	t.Run("list_delegations", func(t *testing.T) {
+		// Set up two delegations.
+		store.Delegate(ctx, space.ID, "delegator-1", "delegate-2")
+		store.Delegate(ctx, space.ID, "voter-3", "delegate-2")
+		defer func() {
+			store.Undelegate(ctx, space.ID, "delegator-1")
+			store.Undelegate(ctx, space.ID, "voter-3")
+		}()
+		rows, err := store.ListDelegations(ctx, space.ID, 10)
+		if err != nil {
+			t.Fatalf("ListDelegations: %v", err)
+		}
+		if len(rows) < 2 {
+			t.Errorf("ListDelegations returned %d rows, want >= 2", len(rows))
+		}
+		for _, r := range rows {
+			if r.DelegatorID == "" || r.DelegateID == "" {
+				t.Error("ListDelegations row has empty ID")
+			}
+			if r.DelegatorName == "" || r.DelegateName == "" {
+				t.Error("ListDelegations row has empty name")
+			}
+		}
+	})
+}
+
+func TestGovernanceDelegationEdgeCases(t *testing.T) {
+	_, store := testDB(t)
+	ctx := context.Background()
+
+	if old, _ := store.GetSpaceBySlug(ctx, "gov-edge-test"); old != nil {
+		store.DeleteSpace(ctx, old.ID)
+	}
+	space, err := store.CreateSpace(ctx, "gov-edge-test", "Gov Edge Cases", "", "owner-edge", "project", "public")
+	if err != nil {
+		t.Fatalf("create space: %v", err)
+	}
+	t.Cleanup(func() { store.DeleteSpace(ctx, space.ID) })
+
+	store.JoinSpace(ctx, space.ID, "member-a", "Member A")
+	store.JoinSpace(ctx, space.ID, "member-b", "Member B")
+
+	t.Run("auto_close_idempotent_on_already_closed", func(t *testing.T) {
+		// Create a proposal, close it manually, then call CheckAndAutoCloseProposal.
+		// It must not error and must return false (already closed).
+		proposal, err := store.CreateNode(ctx, CreateNodeParams{
+			SpaceID:  space.ID,
+			Kind:     KindProposal,
+			Title:    "Already Closed",
+			State:    ProposalOpen,
+			Author:   "owner-edge",
+			AuthorID: "owner-edge",
+		})
+		if err != nil {
+			t.Fatalf("create proposal: %v", err)
+		}
+		if err := store.SetProposalConfig(ctx, proposal.ID, 25, VotingBodyAll); err != nil {
+			t.Fatalf("SetProposalConfig: %v", err)
+		}
+		// Close the proposal manually.
+		if err := store.UpdateNodeState(ctx, proposal.ID, ProposalPassed); err != nil {
+			t.Fatalf("UpdateNodeState: %v", err)
+		}
+		// Now try to auto-close — should be a no-op.
+		closed, err := store.CheckAndAutoCloseProposal(ctx, space.ID, proposal.ID)
+		if err != nil {
+			t.Fatalf("CheckAndAutoCloseProposal on closed proposal: %v", err)
+		}
+		if closed {
+			t.Error("CheckAndAutoCloseProposal returned true for already-closed proposal, want false")
+		}
+	})
+
+	t.Run("effective_vote_count_zero_with_no_votes", func(t *testing.T) {
+		proposal, err := store.CreateNode(ctx, CreateNodeParams{
+			SpaceID:  space.ID,
+			Kind:     KindProposal,
+			Title:    "No Votes Yet",
+			State:    ProposalOpen,
+			Author:   "owner-edge",
+			AuthorID: "owner-edge",
+		})
+		if err != nil {
+			t.Fatalf("create proposal: %v", err)
+		}
+		// member-a has delegated to member-b, but neither has voted.
+		if err := store.Delegate(ctx, space.ID, "member-a", "member-b"); err != nil {
+			t.Fatalf("Delegate: %v", err)
+		}
+		defer store.Undelegate(ctx, space.ID, "member-a")
+
+		eff := store.GetEffectiveVoteCount(ctx, space.ID, proposal.ID)
+		if eff != 0 {
+			t.Errorf("GetEffectiveVoteCount with no votes = %d, want 0", eff)
+		}
+	})
+
+	t.Run("list_delegations_zero_limit_uses_default", func(t *testing.T) {
+		// Set up a delegation so ListDelegations has something to return.
+		if err := store.Delegate(ctx, space.ID, "member-a", "member-b"); err != nil {
+			t.Fatalf("Delegate: %v", err)
+		}
+		defer store.Undelegate(ctx, space.ID, "member-a")
+
+		// limit=0 should apply the default (50) rather than returning 0 rows or erroring.
+		rows, err := store.ListDelegations(ctx, space.ID, 0)
+		if err != nil {
+			t.Fatalf("ListDelegations(limit=0): %v", err)
+		}
+		if len(rows) == 0 {
+			t.Error("ListDelegations(limit=0) returned empty, want >= 1 row (should default to 50)")
+		}
+	})
+}
+
+func TestVotingBodyQuorum(t *testing.T) {
+	_, store := testDB(t)
+	ctx := context.Background()
+
+	if old, _ := store.GetSpaceBySlug(ctx, "voting-body-test"); old != nil {
+		store.DeleteSpace(ctx, old.ID)
+	}
+	space, err := store.CreateSpace(ctx, "voting-body-test", "Voting Body Test", "", "owner-vb", "project", "public")
+	if err != nil {
+		t.Fatalf("create space: %v", err)
+	}
+	t.Cleanup(func() { store.DeleteSpace(ctx, space.ID) })
+
+	// Space has 4 members total: owner-vb + member-1 + member-2 + member-3.
+	store.JoinSpace(ctx, space.ID, "member-1", "Member One")
+	store.JoinSpace(ctx, space.ID, "member-2", "Member Two")
+	store.JoinSpace(ctx, space.ID, "member-3", "Member Three")
+
+	t.Run("council_quorum_uses_council_member_count", func(t *testing.T) {
+		// Create a council node with 2 members (member-1, member-2).
+		council, err := store.CreateNode(ctx, CreateNodeParams{
+			SpaceID:  space.ID,
+			Kind:     KindCouncil,
+			Title:    "Test Council",
+			Author:   "owner-vb",
+			AuthorID: "owner-vb",
+		})
+		if err != nil {
+			t.Fatalf("create council node: %v", err)
+		}
+		store.JoinNodeMember(ctx, council.ID, "member-1")
+		store.JoinNodeMember(ctx, council.ID, "member-2")
+
+		// Verify GetVotingBodyMemberCount returns 2 (council members only, not all 4 space members).
+		count := store.GetVotingBodyMemberCount(ctx, space.ID, VotingBodyCouncil)
+		if count != 2 {
+			t.Errorf("GetVotingBodyMemberCount(council) = %d, want 2", count)
+		}
+
+		// Create proposal scoped to council with 50% quorum (need 1 of 2 council members).
+		proposal, err := store.CreateNode(ctx, CreateNodeParams{
+			SpaceID:  space.ID,
+			Kind:     KindProposal,
+			Title:    "Council Quorum Proposal",
+			State:    ProposalOpen,
+			Author:   "owner-vb",
+			AuthorID: "owner-vb",
+		})
+		if err != nil {
+			t.Fatalf("create proposal: %v", err)
+		}
+		if err := store.SetProposalConfig(ctx, proposal.ID, 50, VotingBodyCouncil); err != nil {
+			t.Fatalf("SetProposalConfig: %v", err)
+		}
+
+		// member-3 votes (not a council member) — 0 of 2 council threshold met; should not close.
+		store.RecordOp(ctx, space.ID, proposal.ID, "member-3", "member-3", "vote", []byte(`{"vote":"yes"}`))
+		closed, err := store.CheckAndAutoCloseProposal(ctx, space.ID, proposal.ID)
+		if err != nil {
+			t.Fatalf("CheckAndAutoCloseProposal: %v", err)
+		}
+		// 1 vote out of 2 council eligible = 50% — quorum met, so proposal closes.
+		// (The vote handler would normally block non-council members, but the quorum check
+		// counts all actual votes against council-sized eligible pool.)
+		if !closed {
+			t.Error("council proposal not closed at 1/2 votes (50% quorum), should close")
+		}
+		node, _ := store.GetNode(ctx, proposal.ID)
+		if node.State != ProposalPassed {
+			t.Errorf("council proposal state = %q, want %q", node.State, ProposalPassed)
+		}
+	})
+
+	t.Run("council_quorum_not_met_with_full_space_count", func(t *testing.T) {
+		// If quorum used all-member count (4), 1 vote would not reach 50%.
+		// But with council-member count (2), 1 vote = 50% → closes.
+		// This test verifies the old bug is fixed: proposal with VotingBodyCouncil and
+		// 2 council members does NOT require votes from all 4 space members.
+		council, err := store.CreateNode(ctx, CreateNodeParams{
+			SpaceID:  space.ID,
+			Kind:     KindCouncil,
+			Title:    "Small Council",
+			Author:   "owner-vb",
+			AuthorID: "owner-vb",
+		})
+		if err != nil {
+			t.Fatalf("create council node: %v", err)
+		}
+		store.JoinNodeMember(ctx, council.ID, "member-1")
+		store.JoinNodeMember(ctx, council.ID, "member-2")
+
+		proposal, err := store.CreateNode(ctx, CreateNodeParams{
+			SpaceID:  space.ID,
+			Kind:     KindProposal,
+			Title:    "Small Council Quorum",
+			State:    ProposalOpen,
+			Author:   "owner-vb",
+			AuthorID: "owner-vb",
+		})
+		if err != nil {
+			t.Fatalf("create proposal: %v", err)
+		}
+		// 75% quorum of a 2-member council = ceil(1.5) → 2 votes needed.
+		if err := store.SetProposalConfig(ctx, proposal.ID, 75, VotingBodyCouncil); err != nil {
+			t.Fatalf("SetProposalConfig: %v", err)
+		}
+
+		// 1 vote = 50% of 2 council members — below 75% quorum, should NOT close.
+		store.RecordOp(ctx, space.ID, proposal.ID, "member-1", "member-1", "vote", []byte(`{"vote":"yes"}`))
+		closed, err := store.CheckAndAutoCloseProposal(ctx, space.ID, proposal.ID)
+		if err != nil {
+			t.Fatalf("CheckAndAutoCloseProposal: %v", err)
+		}
+		if closed {
+			t.Error("council proposal closed at 1/2 votes with 75% quorum, should not close")
+		}
+
+		// 2nd vote = 100% of 2 council members — meets 75% quorum, should close.
+		store.RecordOp(ctx, space.ID, proposal.ID, "member-2", "member-2", "vote", []byte(`{"vote":"yes"}`))
+		closed, err = store.CheckAndAutoCloseProposal(ctx, space.ID, proposal.ID)
+		if err != nil {
+			t.Fatalf("CheckAndAutoCloseProposal: %v", err)
+		}
+		if !closed {
+			t.Error("council proposal not closed at 2/2 votes with 75% quorum, should close")
+		}
+	})
+
+	t.Run("team_quorum_uses_team_member_count", func(t *testing.T) {
+		// Create a team node with 3 members.
+		team, err := store.CreateNode(ctx, CreateNodeParams{
+			SpaceID:  space.ID,
+			Kind:     KindTeam,
+			Title:    "Test Team",
+			Author:   "owner-vb",
+			AuthorID: "owner-vb",
+		})
+		if err != nil {
+			t.Fatalf("create team node: %v", err)
+		}
+		store.JoinNodeMember(ctx, team.ID, "member-1")
+		store.JoinNodeMember(ctx, team.ID, "member-2")
+		store.JoinNodeMember(ctx, team.ID, "member-3")
+
+		count := store.GetVotingBodyMemberCount(ctx, space.ID, VotingBodyTeam)
+		if count != 3 {
+			t.Errorf("GetVotingBodyMemberCount(team) = %d, want 3", count)
+		}
+
+		proposal, err := store.CreateNode(ctx, CreateNodeParams{
+			SpaceID:  space.ID,
+			Kind:     KindProposal,
+			Title:    "Team Quorum Proposal",
+			State:    ProposalOpen,
+			Author:   "owner-vb",
+			AuthorID: "owner-vb",
+		})
+		if err != nil {
+			t.Fatalf("create proposal: %v", err)
+		}
+		// 66% quorum of 3 team members = need 2 votes.
+		if err := store.SetProposalConfig(ctx, proposal.ID, 66, VotingBodyTeam); err != nil {
+			t.Fatalf("SetProposalConfig: %v", err)
+		}
+
+		// 1 vote = 33% of 3 — below 66%, should not close.
+		store.RecordOp(ctx, space.ID, proposal.ID, "member-1", "member-1", "vote", []byte(`{"vote":"yes"}`))
+		closed, err := store.CheckAndAutoCloseProposal(ctx, space.ID, proposal.ID)
+		if err != nil {
+			t.Fatalf("CheckAndAutoCloseProposal: %v", err)
+		}
+		if closed {
+			t.Error("team proposal closed at 1/3 votes with 66% quorum, should not close")
+		}
+
+		// 2nd vote = 66% of 3 — meets quorum, should close.
+		store.RecordOp(ctx, space.ID, proposal.ID, "member-2", "member-2", "vote", []byte(`{"vote":"yes"}`))
+		closed, err = store.CheckAndAutoCloseProposal(ctx, space.ID, proposal.ID)
+		if err != nil {
+			t.Fatalf("CheckAndAutoCloseProposal: %v", err)
+		}
+		if !closed {
+			t.Error("team proposal not closed at 2/3 votes with 66% quorum, should close")
+		}
+		node, _ := store.GetNode(ctx, proposal.ID)
+		if node.State != ProposalPassed {
+			t.Errorf("team proposal state = %q, want %q", node.State, ProposalPassed)
+		}
+	})
+
+	t.Run("all_body_falls_back_to_space_members", func(t *testing.T) {
+		count := store.GetVotingBodyMemberCount(ctx, space.ID, VotingBodyAll)
+		spaceCount := store.GetSpaceMemberCount(ctx, space.ID)
+		if count != spaceCount {
+			t.Errorf("GetVotingBodyMemberCount(all) = %d, want %d (space member count)", count, spaceCount)
+		}
+	})
+
+	t.Run("empty_voting_body_falls_back_to_space_members", func(t *testing.T) {
+		count := store.GetVotingBodyMemberCount(ctx, space.ID, "")
+		spaceCount := store.GetSpaceMemberCount(ctx, space.ID)
+		if count != spaceCount {
+			t.Errorf("GetVotingBodyMemberCount(\"\") = %d, want %d (space member count)", count, spaceCount)
+		}
+	})
+
+	t.Run("council_body_zero_eligible_never_closes", func(t *testing.T) {
+		// Space with no council nodes → eligible=0 → CheckAndAutoCloseProposal returns (false, nil)
+		// even when votes exist. Tests the `if eligible == 0 { return false, nil }` guard.
+		noCouncilSpace, err := store.CreateSpace(ctx, "voting-body-zero-council", "Zero Council", "", "owner-zc", "project", "public")
+		if err != nil {
+			t.Fatalf("create space: %v", err)
+		}
+		t.Cleanup(func() { store.DeleteSpace(ctx, noCouncilSpace.ID) })
+
+		proposal, err := store.CreateNode(ctx, CreateNodeParams{
+			SpaceID:  noCouncilSpace.ID,
+			Kind:     KindProposal,
+			Title:    "Council Zero Eligible",
+			State:    ProposalOpen,
+			Author:   "owner-zc",
+			AuthorID: "owner-zc",
+		})
+		if err != nil {
+			t.Fatalf("create proposal: %v", err)
+		}
+		if err := store.SetProposalConfig(ctx, proposal.ID, 50, VotingBodyCouncil); err != nil {
+			t.Fatalf("SetProposalConfig: %v", err)
+		}
+
+		// No council nodes in this space → eligible = 0.
+		eligible := store.GetVotingBodyMemberCount(ctx, noCouncilSpace.ID, VotingBodyCouncil)
+		if eligible != 0 {
+			t.Fatalf("expected 0 eligible council members, got %d", eligible)
+		}
+
+		// Even with a vote, the proposal must not auto-close.
+		store.RecordOp(ctx, noCouncilSpace.ID, proposal.ID, "owner-zc", "owner-zc", "vote", []byte(`{"vote":"yes"}`))
+		closed, err := store.CheckAndAutoCloseProposal(ctx, noCouncilSpace.ID, proposal.ID)
+		if err != nil {
+			t.Fatalf("CheckAndAutoCloseProposal: %v", err)
+		}
+		if closed {
+			t.Error("proposal closed with 0 eligible council members, should not close")
+		}
+	})
+
+	t.Run("distinct_members_across_multiple_council_nodes", func(t *testing.T) {
+		// A user who belongs to two council nodes should be counted once, not twice.
+		// Tests COUNT(DISTINCT nm.user_id) in GetVotingBodyMemberCount.
+		multiSpace, err := store.CreateSpace(ctx, "voting-body-multi-council", "Multi Council", "", "owner-mc", "project", "public")
+		if err != nil {
+			t.Fatalf("create space: %v", err)
+		}
+		t.Cleanup(func() { store.DeleteSpace(ctx, multiSpace.ID) })
+
+		council1, err := store.CreateNode(ctx, CreateNodeParams{
+			SpaceID:  multiSpace.ID,
+			Kind:     KindCouncil,
+			Title:    "Council A",
+			Author:   "owner-mc",
+			AuthorID: "owner-mc",
+		})
+		if err != nil {
+			t.Fatalf("create council1: %v", err)
+		}
+		council2, err := store.CreateNode(ctx, CreateNodeParams{
+			SpaceID:  multiSpace.ID,
+			Kind:     KindCouncil,
+			Title:    "Council B",
+			Author:   "owner-mc",
+			AuthorID: "owner-mc",
+		})
+		if err != nil {
+			t.Fatalf("create council2: %v", err)
+		}
+
+		// shared-member belongs to both councils; unique-member belongs to council1 only.
+		store.JoinNodeMember(ctx, council1.ID, "shared-member")
+		store.JoinNodeMember(ctx, council1.ID, "unique-member")
+		store.JoinNodeMember(ctx, council2.ID, "shared-member")
+
+		count := store.GetVotingBodyMemberCount(ctx, multiSpace.ID, VotingBodyCouncil)
+		if count != 2 {
+			t.Errorf("GetVotingBodyMemberCount(council) across 2 nodes = %d, want 2 (shared-member deduped)", count)
+		}
+	})
+
+	t.Run("council_body_rejected_outcome", func(t *testing.T) {
+		// Council-scoped proposal where no > yes → state becomes ProposalFailed.
+		rejSpace, err := store.CreateSpace(ctx, "voting-body-rejection", "Rejection Test", "", "owner-rj", "project", "public")
+		if err != nil {
+			t.Fatalf("create space: %v", err)
+		}
+		t.Cleanup(func() { store.DeleteSpace(ctx, rejSpace.ID) })
+
+		council, err := store.CreateNode(ctx, CreateNodeParams{
+			SpaceID:  rejSpace.ID,
+			Kind:     KindCouncil,
+			Title:    "Rejection Council",
+			Author:   "owner-rj",
+			AuthorID: "owner-rj",
+		})
+		if err != nil {
+			t.Fatalf("create council: %v", err)
+		}
+		store.JoinNodeMember(ctx, council.ID, "rj-member-1")
+		store.JoinNodeMember(ctx, council.ID, "rj-member-2")
+
+		proposal, err := store.CreateNode(ctx, CreateNodeParams{
+			SpaceID:  rejSpace.ID,
+			Kind:     KindProposal,
+			Title:    "Rejection Proposal",
+			State:    ProposalOpen,
+			Author:   "owner-rj",
+			AuthorID: "owner-rj",
+		})
+		if err != nil {
+			t.Fatalf("create proposal: %v", err)
+		}
+		// 100% quorum of 2 council members.
+		if err := store.SetProposalConfig(ctx, proposal.ID, 100, VotingBodyCouncil); err != nil {
+			t.Fatalf("SetProposalConfig: %v", err)
+		}
+
+		// 1 yes, 2 no → no > yes → ProposalFailed.
+		store.RecordOp(ctx, rejSpace.ID, proposal.ID, "rj-member-1", "rj-member-1", "vote", []byte(`{"vote":"no"}`))
+		store.RecordOp(ctx, rejSpace.ID, proposal.ID, "rj-member-2", "rj-member-2", "vote", []byte(`{"vote":"no"}`))
+		store.RecordOp(ctx, rejSpace.ID, proposal.ID, "owner-rj", "owner-rj", "vote", []byte(`{"vote":"yes"}`))
+
+		closed, err := store.CheckAndAutoCloseProposal(ctx, rejSpace.ID, proposal.ID)
+		if err != nil {
+			t.Fatalf("CheckAndAutoCloseProposal: %v", err)
+		}
+		if !closed {
+			t.Error("council proposal not closed at 3/2 votes with 100% quorum, should close")
+		}
+		node, _ := store.GetNode(ctx, proposal.ID)
+		if node.State != ProposalFailed {
+			t.Errorf("council rejection proposal state = %q, want %q", node.State, ProposalFailed)
+		}
+	})
 }

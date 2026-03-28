@@ -4299,7 +4299,7 @@ templ ChangelogView(space Space, spaces []Space, entries []ChangelogEntry, user 
 
 // ── Governance view ──────────────────────────────────────────────
 
-templ GovernanceView(space Space, spaces []Space, proposals []ProposalWithVotes, user ViewUser, isOwner bool, stateFilter string, searchQuery string) {
+templ GovernanceView(space Space, spaces []Space, proposals []ProposalWithVotes, user ViewUser, isOwner bool, stateFilter string, searchQuery string, hasDelegated bool, delegateName string, delegations []DelegationRow) {
 	@appLayout(space, spaces, "governance", user) {
 		<div class="p-6 md:p-8 space-y-6">
 			<div class="flex items-center justify-between">
@@ -4324,6 +4324,50 @@ templ GovernanceView(space Space, spaces []Space, proposals []ProposalWithVotes,
 				@govStateTab(space.Slug, "done", "Passed", stateFilter)
 				@govStateTab(space.Slug, "closed", "Rejected", stateFilter)
 			</div>
+			<!-- Delegation panel -->
+			if user.ID != "" {
+				<div class="bg-surface border border-edge rounded-lg p-4 space-y-3">
+					<h2 class="text-sm font-medium text-warm">Your vote</h2>
+					if hasDelegated {
+						<div class="flex items-center justify-between">
+							<p class="text-xs text-warm-muted">Delegated to <span class="text-warm font-medium">{ delegateName }</span></p>
+							<form method="POST" action={ templ.SafeURL("/app/" + space.Slug + "/op") } class="inline">
+								<input type="hidden" name="op" value="undelegate"/>
+								<button type="submit" class="px-3 py-1 text-xs bg-elevated text-warm-muted rounded hover:text-warm transition-colors border border-edge">
+									Undelegate
+								</button>
+							</form>
+						</div>
+					} else {
+						<form method="POST" action={ templ.SafeURL("/app/" + space.Slug + "/op") } class="flex items-center gap-2">
+							<input type="hidden" name="op" value="delegate"/>
+							<input
+								type="text"
+								name="delegate_id"
+								placeholder="User ID to delegate to"
+								class="flex-1 px-3 py-1.5 bg-elevated border border-edge rounded-lg text-xs text-warm placeholder-warm-faint focus:outline-none focus:ring-1 focus:ring-brand"
+							/>
+							<button type="submit" class="px-3 py-1.5 text-xs bg-elevated border border-edge text-warm-muted rounded-lg hover:text-warm transition-colors">
+								Delegate vote
+							</button>
+						</form>
+					}
+					if len(delegations) > 0 {
+						<details class="text-xs">
+							<summary class="cursor-pointer text-warm-faint hover:text-warm transition-colors">{ fmt.Sprintf("%d active delegation(s)", len(delegations)) }</summary>
+							<ul class="mt-2 space-y-1 pl-2 border-l border-edge">
+								for _, d := range delegations {
+									<li class="text-warm-faint">
+										<span class="text-warm-muted">{ d.DelegatorName }</span>
+										<span class="mx-1">→</span>
+										<span class="text-warm-muted">{ d.DelegateName }</span>
+									</li>
+								}
+							</ul>
+						</details>
+					}
+				</div>
+			}
 			<!-- Create proposal form -->
 			<form method="POST" action={ templ.SafeURL("/app/" + space.Slug + "/op") } class="bg-surface border border-edge rounded-lg p-5 space-y-3">
 				<input type="hidden" name="op" value="propose"/>
@@ -4340,7 +4384,7 @@ templ GovernanceView(space Space, spaces []Space, proposals []ProposalWithVotes,
 					rows="2"
 					class="w-full px-3 py-2 bg-elevated border border-edge rounded-lg text-sm text-warm placeholder-warm-faint focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent resize-none"
 				></textarea>
-				<div class="flex items-center gap-3">
+				<div class="flex flex-wrap items-center gap-3">
 					<button type="submit" class="px-4 py-2 bg-brand text-void rounded-lg hover:bg-brand-dark transition-colors text-sm font-medium">
 						Submit proposal
 					</button>
@@ -4351,6 +4395,25 @@ templ GovernanceView(space Space, spaces []Space, proposals []ProposalWithVotes,
 							name="deadline"
 							class="px-2 py-1 bg-elevated border border-edge rounded-lg text-xs text-warm focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent"
 						/>
+					</div>
+					<div class="flex items-center gap-2">
+						<label class="text-xs text-warm-faint">Quorum %</label>
+						<input
+							type="number"
+							name="quorum_pct"
+							min="0"
+							max="100"
+							placeholder="0"
+							class="w-16 px-2 py-1 bg-elevated border border-edge rounded-lg text-xs text-warm focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent"
+						/>
+					</div>
+					<div class="flex items-center gap-2">
+						<label class="text-xs text-warm-faint">Voting body</label>
+						<select name="voting_body" class="px-2 py-1 bg-elevated border border-edge rounded-lg text-xs text-warm focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent">
+							<option value="all">All members</option>
+							<option value="council">Council</option>
+							<option value="team">Team</option>
+						</select>
 					</div>
 				</div>
 			</form>
@@ -4394,6 +4457,12 @@ templ proposalCard(p ProposalWithVotes, spaceSlug string, isOwner bool) {
 							<span class="text-red-400 font-medium">overdue { p.DueDate.Format("Jan 2") }</span>
 						} else {
 							<span>closes { p.DueDate.Format("Jan 2") }</span>
+						}
+					}
+					if p.QuorumPct > 0 {
+						<span class="text-brand/70">quorum { fmt.Sprintf("%d%%", p.QuorumPct) }</span>
+						if p.VotingBody != VotingBodyAll {
+							<span>{ p.VotingBody }</span>
 						}
 					}
 				</div>

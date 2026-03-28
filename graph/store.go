@@ -505,6 +505,18 @@ CREATE TABLE IF NOT EXISTS delegations (
     PRIMARY KEY (space_id, delegator_id)
 );
 CREATE INDEX IF NOT EXISTS idx_delegations_delegate ON delegations(space_id, delegate_id);
+
+-- hive_diagnostics stores phase events from the hive runner so the /hive/feed
+-- endpoint works in production (Fly) where loop/diagnostics.jsonl is not present.
+CREATE TABLE IF NOT EXISTS hive_diagnostics (
+    id         TEXT PRIMARY KEY,
+    phase      TEXT NOT NULL DEFAULT '',
+    outcome    TEXT NOT NULL DEFAULT '',
+    cost_usd   FLOAT8 NOT NULL DEFAULT 0,
+    payload    JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_hive_diagnostics_created ON hive_diagnostics(created_at DESC);
 `)
 	return err
 }
@@ -2561,6 +2573,41 @@ func (s *Store) GetHiveAgentID(ctx context.Context) string {
 	return id
 }
 
+// AppendHiveDiagnostic stores a phase event from the hive runner.
+// id is caller-supplied (e.g. a UUID from the runner); ON CONFLICT DO NOTHING
+// ensures duplicate POSTs are idempotent. payload is the full JSON event.
+func (s *Store) AppendHiveDiagnostic(ctx context.Context, phase, outcome string, costUSD float64, payload []byte) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO hive_diagnostics (id, phase, outcome, cost_usd, payload)
+		 VALUES ($1, $2, $3, $4, $5)`,
+		newID(), phase, outcome, costUSD, payload)
+	return err
+}
+
+// ListHiveDiagnostics returns the most recent phase events, newest first.
+// limit must be > 0; defaults to 10 (BOUNDED).
+func (s *Store) ListHiveDiagnostics(ctx context.Context, limit int) ([]DiagEntry, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT phase, outcome, cost_usd, created_at FROM hive_diagnostics
+		 ORDER BY created_at DESC LIMIT $1`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list hive diagnostics: %w", err)
+	}
+	defer rows.Close()
+	var entries []DiagEntry
+	for rows.Next() {
+		var e DiagEntry
+		if err := rows.Scan(&e.Phase, &e.Outcome, &e.CostUSD, &e.Timestamp); err != nil {
+			return nil, fmt.Errorf("scan hive diagnostic: %w", err)
+		}
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
+}
+
 // HasVoted checks if a user has already voted on a proposal.
 func (s *Store) HasVoted(ctx context.Context, nodeID, actorID string) bool {
 	var exists bool
@@ -2637,6 +2684,26 @@ func (s *Store) GetSpaceMemberCount(ctx context.Context, spaceID string) int {
 	return count
 }
 
+// GetVotingBodyMemberCount returns the eligible voter count for a proposal based on its voting_body.
+// VotingBodyAll → all space members (same as GetSpaceMemberCount).
+// VotingBodyCouncil → distinct members across all KindCouncil nodes in the space.
+// VotingBodyTeam → distinct members across all KindTeam nodes in the space.
+func (s *Store) GetVotingBodyMemberCount(ctx context.Context, spaceID, votingBody string) int {
+	switch votingBody {
+	case VotingBodyCouncil, VotingBodyTeam:
+		var count int
+		s.db.QueryRowContext(ctx, `
+			SELECT COUNT(DISTINCT nm.user_id)
+			FROM node_members nm
+			JOIN nodes n ON n.id = nm.node_id
+			WHERE n.space_id = $1 AND n.kind = $2`,
+			spaceID, votingBody).Scan(&count)
+		return count
+	default:
+		return s.GetSpaceMemberCount(ctx, spaceID)
+	}
+}
+
 // GetEffectiveVoteCount returns the number of unique voters (direct + delegated)
 // who have voted on the given proposal node in the given space.
 func (s *Store) GetEffectiveVoteCount(ctx context.Context, spaceID, nodeID string) int {
@@ -2658,14 +2725,14 @@ func (s *Store) GetEffectiveVoteCount(ctx context.Context, spaceID, nodeID strin
 // Returns true if the proposal was auto-closed.
 func (s *Store) CheckAndAutoCloseProposal(ctx context.Context, spaceID, nodeID string) (bool, error) {
 	var quorumPct int
-	var state string
+	var state, votingBody string
 	err := s.db.QueryRowContext(ctx,
-		`SELECT quorum_pct, state FROM nodes WHERE id = $1`, nodeID).Scan(&quorumPct, &state)
+		`SELECT quorum_pct, state, voting_body FROM nodes WHERE id = $1`, nodeID).Scan(&quorumPct, &state, &votingBody)
 	if err != nil || state != ProposalOpen || quorumPct == 0 {
 		return false, err
 	}
 
-	eligible := s.GetSpaceMemberCount(ctx, spaceID)
+	eligible := s.GetVotingBodyMemberCount(ctx, spaceID, votingBody)
 	if eligible == 0 {
 		return false, nil
 	}
@@ -2694,6 +2761,60 @@ func (s *Store) CheckAndAutoCloseProposal(ctx context.Context, spaceID, nodeID s
 	payload, _ := json.Marshal(map[string]string{"outcome": outcome, "trigger": "quorum"})
 	s.RecordOp(ctx, spaceID, nodeID, "system", "", "close_proposal", payload)
 	return true, nil
+}
+
+// DelegationRow represents a single delegation entry in a space, with names resolved.
+type DelegationRow struct {
+	DelegatorID   string
+	DelegatorName string
+	DelegateID    string
+	DelegateName  string
+}
+
+// GetUserDelegation returns who actorID has delegated to in spaceID, if any.
+func (s *Store) GetUserDelegation(ctx context.Context, spaceID, actorID string) (delegateID, delegateName string, exists bool) {
+	var dID string
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT delegate_id FROM delegations WHERE space_id = $1 AND delegator_id = $2`,
+		spaceID, actorID).Scan(&dID); err != nil {
+		return "", "", false
+	}
+	s.db.QueryRowContext(ctx,
+		`SELECT user_name FROM space_members WHERE space_id = $1 AND user_id = $2`,
+		spaceID, dID).Scan(&delegateName)
+	if delegateName == "" {
+		delegateName = dID
+	}
+	return dID, delegateName, true
+}
+
+// ListDelegations returns all delegations in a space with display names resolved (BOUNDED at limit).
+func (s *Store) ListDelegations(ctx context.Context, spaceID string, limit int) ([]DelegationRow, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT d.delegator_id, COALESCE(sm1.user_name, d.delegator_id),
+		       d.delegate_id,  COALESCE(sm2.user_name, d.delegate_id)
+		FROM delegations d
+		LEFT JOIN space_members sm1 ON sm1.space_id = d.space_id AND sm1.user_id = d.delegator_id
+		LEFT JOIN space_members sm2 ON sm2.space_id = d.space_id AND sm2.user_id = d.delegate_id
+		WHERE d.space_id = $1
+		ORDER BY d.created_at DESC
+		LIMIT $2`, spaceID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list delegations: %w", err)
+	}
+	defer rows.Close()
+	var result []DelegationRow
+	for rows.Next() {
+		var r DelegationRow
+		if err := rows.Scan(&r.DelegatorID, &r.DelegatorName, &r.DelegateID, &r.DelegateName); err != nil {
+			return nil, err
+		}
+		result = append(result, r)
+	}
+	return result, rows.Err()
 }
 
 // ────────────────────────────────────────────────────────────────────

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -302,6 +303,9 @@ func (h *Handlers) Register(mux *http.ServeMux) {
 
 	// Mind state (requires auth — used by cmd/post to sync loop state).
 	mux.Handle("PUT /api/mind-state", h.writeWrap(h.handleSetMindState))
+
+	// Hive diagnostics ingestion (requires auth — used by hive runner).
+	mux.Handle("POST /api/hive/diagnostic", h.writeWrap(h.handleHiveDiagnostic))
 
 	// Node children (for HTMX polling).
 	mux.Handle("GET /app/{slug}/node/{id}/children", h.readWrap(h.handleNodeChildren))
@@ -2068,12 +2072,16 @@ func (h *Handlers) handleGovernance(w http.ResponseWriter, r *http.Request) {
 		proposals = filtered
 	}
 
+	actorID := h.userID(r)
+	_, delegateName, hasDelegated := h.store.GetUserDelegation(r.Context(), space.ID, actorID)
+	delegations, _ := h.store.ListDelegations(r.Context(), space.ID, 20)
+
 	if wantsJSON(r) {
 		writeJSON(w, http.StatusOK, map[string]any{"space": space, "proposals": proposals})
 		return
 	}
 
-	GovernanceView(*space, spaces, proposals, h.viewUser(r), isOwner, stateFilter, searchQuery).Render(r.Context(), w)
+	GovernanceView(*space, spaces, proposals, h.viewUser(r), isOwner, stateFilter, searchQuery, hasDelegated, delegateName, delegations).Render(r.Context(), w)
 }
 
 // ────────────────────────────────────────────────────────────────────
@@ -4055,9 +4063,14 @@ func parseIterFromPosts(posts []Node) int {
 func (h *Handlers) handleHive(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	// Diagnostics: DB first (works on Fly), fall back to local files (dev).
+	entries, _ := h.store.ListHiveDiagnostics(ctx, maxHiveDiagEntries)
+	if len(entries) == 0 {
+		entries = readDiagnostics(h.loopDir, maxHiveDiagEntries)
+	}
+
 	// Local file data (dev only — empty on Fly, and that's fine).
 	ls := readLoopState(h.loopDir)
-	entries := readDiagnostics(h.loopDir, maxHiveDiagEntries)
 	repoDir := ""
 	if h.loopDir != "" {
 		repoDir = filepath.Dir(h.loopDir)
@@ -4130,9 +4143,37 @@ func (h *Handlers) handleHiveStatus(w http.ResponseWriter, r *http.Request) {
 	HiveStatusPartial(posts, stats, roles, tasks, totalOps, lastActive, iterCount, ls).Render(ctx, w)
 }
 
+// handleHiveDiagnostic accepts POST /api/hive/diagnostic from the hive runner.
+// Stores the phase event so /hive/feed works in production where loop files are absent.
+func (h *Handlers) handleHiveDiagnostic(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(io.LimitReader(r.Body, 64*1024))
+	if err != nil {
+		http.Error(w, "read body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	var ev struct {
+		Phase   string  `json:"phase"`
+		Outcome string  `json:"outcome"`
+		CostUSD float64 `json:"cost_usd"`
+	}
+	if err := json.Unmarshal(body, &ev); err != nil {
+		http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := h.store.AppendHiveDiagnostic(r.Context(), ev.Phase, ev.Outcome, ev.CostUSD, body); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]string{"status": "ok"})
+}
+
 // handleHiveFeed renders the phase timeline partial for HTMX polling — public, no auth required.
+// Reads from the database first (works on Fly); falls back to local files (dev without DB).
 func (h *Handlers) handleHiveFeed(w http.ResponseWriter, r *http.Request) {
-	entries := readDiagnostics(h.loopDir, maxHiveDiagEntries)
+	entries, _ := h.store.ListHiveDiagnostics(r.Context(), maxHiveDiagEntries)
+	if len(entries) == 0 {
+		entries = readDiagnostics(h.loopDir, maxHiveDiagEntries)
+	}
 	HiveDiagFeed(entries).Render(r.Context(), w)
 }
 

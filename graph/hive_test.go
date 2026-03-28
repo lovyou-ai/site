@@ -478,3 +478,54 @@ func TestGetHiveFeed_PublicNoAuth(t *testing.T) {
 		t.Error("GET /hive/feed: body contains full HTML shell — partial must not include <html>")
 	}
 }
+
+// TestPostHiveDiagnostic_StoresAndServes verifies the full round-trip:
+// POST /api/hive/diagnostic stores the event and GET /hive/feed renders it.
+func TestPostHiveDiagnostic_StoresAndServes(t *testing.T) {
+	h, _, _ := testHandlers(t)
+
+	mux := http.NewServeMux()
+	h.Register(mux)
+
+	// POST a diagnostic event (auth injected by testHandlers).
+	payload := `{"phase":"builder","outcome":"success","cost_usd":0.42,"timestamp":"2026-03-29T10:00:00Z"}`
+	req := httptest.NewRequest("POST", "/api/hive/diagnostic", strings.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("POST /api/hive/diagnostic: status = %d, want 201; body: %s", w.Code, w.Body.String())
+	}
+
+	// GET /hive/feed must now include the stored event.
+	req2 := httptest.NewRequest("GET", "/hive/feed", nil)
+	w2 := httptest.NewRecorder()
+	mux.ServeHTTP(w2, req2)
+
+	if w2.Code != http.StatusOK {
+		t.Fatalf("GET /hive/feed after diagnostic: status = %d, want 200; body: %s", w2.Code, w2.Body.String())
+	}
+	if !strings.Contains(w2.Body.String(), "builder") {
+		t.Error("GET /hive/feed: body does not contain posted phase 'builder'")
+	}
+}
+
+// TestListHiveDiagnostics_Empty verifies ListHiveDiagnostics returns nil (not error)
+// when no diagnostics have been stored yet.
+func TestListHiveDiagnostics_Empty(t *testing.T) {
+	db, store := testDB(t)
+	ctx := t.Context()
+	// Truncate to isolate from rows inserted by TestPostHiveDiagnostic_StoresAndServes
+	// or any prior run. The hive_diagnostics table has no foreign-key dependents.
+	if _, err := db.ExecContext(ctx, `DELETE FROM hive_diagnostics`); err != nil {
+		t.Fatalf("clear hive_diagnostics: %v", err)
+	}
+	entries, err := store.ListHiveDiagnostics(ctx, 10)
+	if err != nil {
+		t.Fatalf("ListHiveDiagnostics: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("ListHiveDiagnostics on empty DB: got %d entries, want 0", len(entries))
+	}
+}
