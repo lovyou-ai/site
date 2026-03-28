@@ -1683,3 +1683,70 @@ func TestListInvitesAndRevoke(t *testing.T) {
 		}
 	})
 }
+
+func TestUpdateNodeCauses(t *testing.T) {
+	_, store := testDB(t)
+	ctx := context.Background()
+
+	space, err := store.CreateSpace(ctx, "test-update-causes", "Update Causes", "", "owner-1", "project", "public")
+	if err != nil {
+		t.Fatalf("create space: %v", err)
+	}
+	t.Cleanup(func() { store.DeleteSpace(ctx, space.ID) })
+
+	node, err := store.CreateNode(ctx, CreateNodeParams{
+		SpaceID:  space.ID,
+		Kind:     KindClaim,
+		Title:    "Test Claim",
+		Author:   "tester",
+		AuthorID: "tester-id",
+	})
+	if err != nil {
+		t.Fatalf("create node: %v", err)
+	}
+
+	// Node starts with no causes.
+	if len(node.Causes) != 0 {
+		t.Errorf("initial causes = %v, want []", node.Causes)
+	}
+
+	// Set causes.
+	causeID := "task-node-abc123"
+	if err := store.UpdateNodeCauses(ctx, node.ID, []string{causeID}); err != nil {
+		t.Fatalf("UpdateNodeCauses: %v", err)
+	}
+
+	// Verify causes persisted.
+	got, err := store.GetNode(ctx, node.ID)
+	if err != nil {
+		t.Fatalf("get node: %v", err)
+	}
+	if len(got.Causes) != 1 || got.Causes[0] != causeID {
+		t.Errorf("causes = %v, want [%q]", got.Causes, causeID)
+	}
+
+	// Update with multiple causes.
+	causeIDs := []string{"task-aaa", "task-bbb"}
+	if err := store.UpdateNodeCauses(ctx, node.ID, causeIDs); err != nil {
+		t.Fatalf("UpdateNodeCauses multi: %v", err)
+	}
+	got, _ = store.GetNode(ctx, node.ID)
+	if len(got.Causes) != 2 {
+		t.Errorf("causes = %v, want 2 entries", got.Causes)
+	}
+
+	// Update with nil causes — should store empty slice, not error.
+	if err := store.UpdateNodeCauses(ctx, node.ID, nil); err != nil {
+		t.Fatalf("UpdateNodeCauses nil: %v", err)
+	}
+	got, _ = store.GetNode(ctx, node.ID)
+	if len(got.Causes) != 0 {
+		t.Errorf("causes after nil update = %v, want []", got.Causes)
+	}
+
+	// Non-existent node returns ErrNotFound.
+	err = store.UpdateNodeCauses(ctx, "nonexistent-id", []string{"x"})
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("expected ErrNotFound for missing node, got %v", err)
+	}
+}

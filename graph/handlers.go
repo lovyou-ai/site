@@ -3109,8 +3109,9 @@ func (h *Handlers) handleOp(w http.ResponseWriter, r *http.Request) {
 	case "edit":
 		nodeID := r.FormValue("node_id")
 		body := strings.TrimSpace(r.FormValue("body"))
-		if nodeID == "" || body == "" {
-			http.Error(w, "node_id and body required", http.StatusBadRequest)
+		causesStr := r.FormValue("causes")
+		if nodeID == "" || (body == "" && causesStr == "") {
+			http.Error(w, "node_id and body or causes required", http.StatusBadRequest)
 			return
 		}
 		// Only the author can edit.
@@ -3123,12 +3124,28 @@ func (h *Handlers) handleOp(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "only the author can edit", http.StatusForbidden)
 			return
 		}
-		oldBody := node.Body
-		if err := h.store.EditNodeBody(ctx, nodeID, body); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+		if body != "" {
+			oldBody := node.Body
+			if err := h.store.EditNodeBody(ctx, nodeID, body); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			h.store.RecordOp(ctx, space.ID, nodeID, actor, actorID, "edit", json.RawMessage(`{"old_body":`+strconv.Quote(oldBody)+`}`))
 		}
-		h.store.RecordOp(ctx, space.ID, nodeID, actor, actorID, "edit", json.RawMessage(`{"old_body":`+strconv.Quote(oldBody)+`}`))
+		if causesStr != "" {
+			var causes []string
+			for _, c := range strings.Split(causesStr, ",") {
+				if c = strings.TrimSpace(c); c != "" {
+					causes = append(causes, c)
+				}
+			}
+			if err := h.store.UpdateNodeCauses(ctx, nodeID, causes); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			meta, _ := json.Marshal(map[string]string{"causes": causesStr})
+			h.store.RecordOp(ctx, space.ID, nodeID, actor, actorID, "edit", json.RawMessage(meta))
+		}
 		if wantsJSON(r) {
 			writeJSON(w, http.StatusOK, map[string]string{"op": "edit"})
 			return

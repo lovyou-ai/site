@@ -2140,6 +2140,25 @@ func (s *Store) EditNodeBody(ctx context.Context, nodeID, newBody string) error 
 	return nil
 }
 
+// UpdateNodeCauses sets the causes list for a node.
+// Used to retroactively populate causes on nodes that were created without them
+// (Invariant 2: CAUSALITY — every event has declared causes).
+func (s *Store) UpdateNodeCauses(ctx context.Context, nodeID string, causes []string) error {
+	if causes == nil {
+		causes = []string{}
+	}
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE nodes SET causes = $1 WHERE id = $2`, pq.Array(causes), nodeID)
+	if err != nil {
+		return fmt.Errorf("update node causes: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // SoftDeleteNode replaces the body with a tombstone marker.
 func (s *Store) SoftDeleteNode(ctx context.Context, nodeID string) error {
 	res, err := s.db.ExecContext(ctx,

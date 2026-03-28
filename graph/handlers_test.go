@@ -1521,3 +1521,92 @@ func TestHandlerNodeStateChildrenIncomplete(t *testing.T) {
 		t.Errorf("status = %d, want %d (422); body: %s", w.Code, http.StatusUnprocessableEntity, w.Body.String())
 	}
 }
+
+// TestHandlerOpEditCauses verifies that op=edit with a causes field updates the
+// node's causes via UpdateNodeCauses. This is the handler path used by
+// backfillClaimCauses in cmd/post to retroactively satisfy Invariant 2 (CAUSALITY).
+func TestHandlerOpEditCauses(t *testing.T) {
+	h, store, _ := testHandlers(t)
+
+	mux := http.NewServeMux()
+	h.Register(mux)
+
+	if old, _ := store.GetSpaceBySlug(t.Context(), "handler-edit-causes-test"); old != nil {
+		store.DeleteSpace(t.Context(), old.ID)
+	}
+	space, err := store.CreateSpace(t.Context(), "handler-edit-causes-test", "Edit Causes Test", "", "test-user-1", "project", "public")
+	if err != nil {
+		t.Fatalf("create space: %v", err)
+	}
+	t.Cleanup(func() { store.DeleteSpace(t.Context(), space.ID) })
+
+	// Create a claim node with no causes (simulates the 103 legacy claims).
+	node, err := store.CreateNode(t.Context(), CreateNodeParams{
+		SpaceID:  space.ID,
+		Kind:     KindClaim,
+		Title:    "Legacy Claim",
+		Author:   "Tester",
+		AuthorID: "test-user-1",
+	})
+	if err != nil {
+		t.Fatalf("create node: %v", err)
+	}
+
+	t.Run("edit_causes_single", func(t *testing.T) {
+		body := `{"op":"edit","node_id":"` + node.ID + `","causes":"task-node-abc123"}`
+		req := httptest.NewRequest("POST", "/app/handler-edit-causes-test/op", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json")
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+		}
+
+		// Verify the causes were persisted.
+		got, err := store.GetNode(t.Context(), node.ID)
+		if err != nil {
+			t.Fatalf("get node: %v", err)
+		}
+		if len(got.Causes) != 1 || got.Causes[0] != "task-node-abc123" {
+			t.Errorf("causes = %v, want [task-node-abc123]", got.Causes)
+		}
+	})
+
+	t.Run("edit_causes_multiple_comma_separated", func(t *testing.T) {
+		body := `{"op":"edit","node_id":"` + node.ID + `","causes":"task-aaa,task-bbb,task-ccc"}`
+		req := httptest.NewRequest("POST", "/app/handler-edit-causes-test/op", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json")
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+		}
+
+		got, err := store.GetNode(t.Context(), node.ID)
+		if err != nil {
+			t.Fatalf("get node: %v", err)
+		}
+		if len(got.Causes) != 3 {
+			t.Errorf("causes = %v, want 3 entries", got.Causes)
+		}
+	})
+
+	t.Run("edit_requires_body_or_causes", func(t *testing.T) {
+		// op=edit with neither body nor causes should fail.
+		body := `{"op":"edit","node_id":"` + node.ID + `"}`
+		req := httptest.NewRequest("POST", "/app/handler-edit-causes-test/op", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json")
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("status = %d, want %d (400) when neither body nor causes provided; body: %s",
+				w.Code, http.StatusBadRequest, w.Body.String())
+		}
+	})
+}
