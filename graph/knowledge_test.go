@@ -348,6 +348,96 @@ func TestAssertOpMultipleCauses(t *testing.T) {
 	}
 }
 
+// TestMaxLessonNumberEndpoint verifies that GET /app/{slug}/knowledge?op=max_lesson
+// returns the highest numbered lesson claim via server-side aggregate.
+func TestMaxLessonNumberEndpoint(t *testing.T) {
+	_, store := testDB(t)
+	slug := fmt.Sprintf("test-max-lesson-%d", time.Now().UnixNano())
+	space, err := store.CreateSpace(t.Context(), slug, "Max Lesson Test", "", "owner-1", "project", "public")
+	if err != nil {
+		t.Fatalf("create space: %v", err)
+	}
+	t.Cleanup(func() { store.DeleteSpace(t.Context(), space.ID) })
+
+	testUser := &auth.User{ID: "owner-1", Name: "Owner", Email: "owner@test.com", Kind: "human"}
+	wrap := func(next http.HandlerFunc) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := auth.ContextWithUser(r.Context(), testUser)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+	h := NewHandlers(store, wrap, wrap)
+	mux := http.NewServeMux()
+	h.Register(mux)
+
+	// Seed claims: numbered lessons and a non-lesson claim.
+	for _, title := range []string{"Lesson 3: third", "Lesson 47: forty-seven", "Lesson 12: twelve", "Critique: a verdict"} {
+		payload := fmt.Sprintf(`{"op":"assert","title":%q,"body":"body"}`, title)
+		req := httptest.NewRequest("POST", "/app/"+slug+"/op", strings.NewReader(payload))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json")
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+		if w.Code != http.StatusCreated {
+			t.Fatalf("assert %q: status = %d; body: %s", title, w.Code, w.Body.String())
+		}
+	}
+
+	req := httptest.NewRequest("GET", "/app/"+slug+"/knowledge?op=max_lesson", nil)
+	req.Header.Set("Accept", "application/json")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+
+	var resp struct {
+		MaxLesson int `json:"max_lesson"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.MaxLesson != 47 {
+		t.Errorf("max_lesson = %d, want 47", resp.MaxLesson)
+	}
+}
+
+// TestMaxLessonNumberEndpointEmpty verifies that the endpoint returns 0 when no
+// numbered lessons exist in the space.
+func TestMaxLessonNumberEndpointEmpty(t *testing.T) {
+	_, store := testDB(t)
+	slug := fmt.Sprintf("test-max-lesson-empty-%d", time.Now().UnixNano())
+	space, err := store.CreateSpace(t.Context(), slug, "Max Lesson Empty Test", "", "owner-1", "project", "public")
+	if err != nil {
+		t.Fatalf("create space: %v", err)
+	}
+	t.Cleanup(func() { store.DeleteSpace(t.Context(), space.ID) })
+
+	h := NewHandlers(store, nil, nil)
+	mux := http.NewServeMux()
+	h.Register(mux)
+
+	req := httptest.NewRequest("GET", "/app/"+slug+"/knowledge?op=max_lesson", nil)
+	req.Header.Set("Accept", "application/json")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+
+	var resp struct {
+		MaxLesson int `json:"max_lesson"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.MaxLesson != 0 {
+		t.Errorf("max_lesson = %d, want 0 (no lessons)", resp.MaxLesson)
+	}
+}
+
 // TestKnowledgeMissingSpace verifies GET /app/{slug}/knowledge returns 404 when the
 // space does not exist.
 func TestKnowledgeMissingSpace(t *testing.T) {

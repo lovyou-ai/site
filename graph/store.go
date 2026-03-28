@@ -3521,6 +3521,24 @@ func (s *Store) ListKnowledgeClaims(ctx context.Context, stateFilter, query stri
 	return claims, rows.Err()
 }
 
+// MaxLessonNumber returns the highest "Lesson N" claim number in a space.
+// Titles must match "^Lesson [0-9]+" (case-sensitive). Returns 0 if no
+// numbered lessons exist. Server-side aggregate avoids client-side scan
+// truncation as lesson count grows (Invariant 13: BOUNDED).
+func (s *Store) MaxLessonNumber(ctx context.Context, spaceID string) (int, error) {
+	var max int
+	err := s.db.QueryRowContext(ctx, `
+		SELECT COALESCE(MAX(
+			CASE WHEN title ~ '^Lesson [0-9]+'
+			THEN CAST(REGEXP_REPLACE(title, '^Lesson ([0-9]+).*', '\1') AS INTEGER)
+			ELSE 0 END
+		), 0)
+		FROM nodes
+		WHERE space_id = $1 AND kind = 'claim' AND parent_id IS NULL
+	`, spaceID).Scan(&max)
+	return max, err
+}
+
 // CountChallenges returns the number of challenge ops for a given node.
 func (s *Store) CountChallenges(ctx context.Context, nodeID string) int {
 	var count int

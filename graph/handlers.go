@@ -1407,6 +1407,17 @@ func (h *Handlers) handleKnowledge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// ?op=max_lesson — server-side aggregate for NextLessonNumber (O(1), no truncation).
+	if r.URL.Query().Get("op") == "max_lesson" {
+		max, err := h.store.MaxLessonNumber(r.Context(), space.ID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"max_lesson": max})
+		return
+	}
+
 	spaces, _ := h.store.ListSpaces(r.Context(), h.userID(r))
 
 	searchQuery := r.URL.Query().Get("q")
