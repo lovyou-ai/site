@@ -307,6 +307,7 @@ func (h *Handlers) Register(mux *http.ServeMux) {
 
 	// Hive diagnostics ingestion (requires auth — used by hive runner).
 	mux.Handle("POST /api/hive/diagnostic", h.writeWrap(h.handleHiveDiagnostic))
+	mux.Handle("POST /api/hive/escalation", h.writeWrap(h.handleHiveEscalation))
 
 	// Node children (for HTMX polling).
 	mux.Handle("GET /app/{slug}/node/{id}/children", h.readWrap(h.handleNodeChildren))
@@ -4189,6 +4190,59 @@ func (h *Handlers) handleHiveDiagnostic(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]string{"status": "ok"})
+}
+
+// handleHiveEscalation accepts POST /api/hive/escalation from the hive pipeline.
+// Sets the task state to "escalated", creates a notification for the space owner,
+// and records an escalate op for auditability.
+func (h *Handlers) handleHiveEscalation(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		SpaceSlug  string `json:"space_slug"`
+		TaskID     string `json:"task_id"`
+		Reason     string `json:"reason"`
+		AssigneeID string `json:"assignee_id"` // optional: specific user to notify
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if req.TaskID == "" || req.SpaceSlug == "" {
+		http.Error(w, "task_id and space_slug required", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+
+	// Set task state to escalated.
+	if err := h.store.UpdateNodeState(ctx, req.TaskID, "escalated"); err != nil {
+		http.Error(w, "update task state: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Look up the space to find the owner for notification.
+	space, err := h.store.GetSpaceBySlug(ctx, req.SpaceSlug)
+	if err != nil {
+		http.Error(w, "space not found: "+err.Error(), http.StatusNotFound)
+		return
+	}
+
+	// Record an escalate op for the audit trail.
+	payload, _ := json.Marshal(map[string]string{"reason": req.Reason})
+	op, _ := h.store.RecordOp(ctx, space.ID, req.TaskID, "hive", h.userID(r), "escalate", payload)
+
+	// Notify the assignee, or fall back to the space owner.
+	notifyTarget := req.AssigneeID
+	if notifyTarget == "" {
+		notifyTarget = space.OwnerID
+	}
+	opID := ""
+	if op != nil {
+		opID = op.ID
+	}
+	h.store.CreateNotification(ctx, notifyTarget, opID, space.ID,
+		"Hive ESCALATION: "+req.Reason)
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "escalated", "task_id": req.TaskID})
 }
 
 // handleHiveFeed renders the phase timeline partial for HTMX polling — public, no auth required.
