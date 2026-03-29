@@ -1,6 +1,9 @@
 app = "lovyou-ai"
 primary_region = "syd"
 
+[env]
+  HIVE_REPO_PATH = "/app/hive"
+
 [build]
 
 [http_service]
